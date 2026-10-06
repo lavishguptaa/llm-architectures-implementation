@@ -59,7 +59,7 @@ def create_dataloader(
 
 class Rope(nn.Module):
     
-    def __init__(self,head_dim,seq_length=4096,base=500000):
+    def __init__(self, head_dim, seq_length, base):
         super().__init__()
         
         assert head_dim % 2 == 0,"head_dim must be even"
@@ -185,7 +185,7 @@ class GroupedQueryAttention(nn.Module):
         attention_score = Q @ K.transpose(3,2)
         
         mask_bool = self.mask.bool()[:num_tokens,:num_tokens]
-        attention_score.masked_fill(mask_bool,float('-inf'))
+        attention_score = attention_score.masked_fill(mask_bool,float('-inf'))
         
         attention_weights = torch.softmax(attention_score / K.shape[-1] ** 0.5,dim=-1)
         
