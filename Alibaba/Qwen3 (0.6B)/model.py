@@ -58,55 +58,62 @@ def create_dataloader(
     return dataloader
 
 class Rope(nn.Module):
-    
-    def __init__(self, head_dim, seq_length, base):
+
+    def __init__(self, head_dim, seq_len, theta):
         super().__init__()
-        
-        assert head_dim % 2 == 0,"head_dim must be even"
-        
+
+        assert head_dim % 2 == 0, "head_dim must be even"
+
         self.head_dim = head_dim
-        self.seq_length = seq_length
-        self.theta = base
-        
-        inv_freq = 1.0 / (
-           base ** ( torch.arange(0, head_dim, 2).float() / head_dim)
+        self.max_seq_length = seq_len
+        self.theta = theta
+
+        inv_freq = 1.0 / (theta ** (torch.arange(0, head_dim, 2).float() / head_dim))
+
+
+        positions = torch.arange(seq_len, dtype=torch.float32)
+
+        freqs = torch.outer(positions, inv_freq)
+
+        self.register_buffer(
+                "cos_cached", 
+                freqs.cos(),
+                persistent=False
         )
         
-        self.register_buffer("inv_freq", inv_freq)
-        
-        positions = torch.arange(seq_length).float()
-        
-        freqs = torch.outer(positions, inv_freq)
-        
-        
-        self.register_buffer("cos_cached", freqs.cos())
-        self.register_buffer("sin_cached", freqs.sin())
-        
+        self.register_buffer(
+                "sin_cached",
+                freqs.sin(),
+                persistent=False
+        )
+
     def forward(self, x, position_ids=None):
         seq_len = x.size(-2)
 
         if position_ids is None:
             position_ids = torch.arange(
                 seq_len,
-                device=x.device
+                device=x.device,
+            )
+        else:
+            position_ids = position_ids.to(x.device)
+
+        if position_ids.max().item() >= self.max_seq_length:
+            raise ValueError(
+                f"Position {position_ids.max().item()} exceeds "
+                f"RoPE max_seq_len={self.max_seq_length}"
             )
 
         cos = self.cos_cached[position_ids]
         sin = self.sin_cached[position_ids]
 
-
         x1 = x[..., ::2]
         x2 = x[..., 1::2]
-
 
         rotated_x1 = x1 * cos - x2 * sin
         rotated_x2 = x1 * sin + x2 * cos
 
-
-        x_rotated = torch.stack(
-            (rotated_x1, rotated_x2),
-            dim=-1
-        ).flatten(-2)
+        x_rotated = torch.stack((rotated_x1, rotated_x2), dim=-1).flatten(-2)
 
         return x_rotated
         
@@ -118,9 +125,9 @@ class GroupedQueryAttention(nn.Module):
             kv_head, 
             context_length, 
             dropout, d_in,
-            d_out, 
+            d_out,
+            rope_base,
             bias_qkv=False,
-            rope_base=1000000
         ):
         
         
@@ -150,8 +157,8 @@ class GroupedQueryAttention(nn.Module):
         
         self.rope = Rope(
             head_dim=self.head_dim,
-            seq_length=context_length,
-            base=rope_base
+            seq_len=context_length,
+            theta=rope_base
         )
         
         self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length),diagonal=1).bool())
@@ -253,7 +260,8 @@ class TransformerBlock(nn.Module):
             d_out = cfg['emb_dim'],
             context_length = cfg['context_length'],
             dropout = cfg['dropout'],
-            bias_qkv = cfg['bias_qkv']
+            bias_qkv = cfg['bias_qkv'],
+            rope_base = cfg['rope_theta']
         )
         
         self.layer1 = RMSNorm(cfg['emb_dim'])
@@ -339,8 +347,9 @@ def main():
         "num_heads": 16,
         "kv_head": 8,
         "num_layers": 28,
-        "dropout": 0.1,
-        "bias_qkv": False
+        "dropout": 0.0,
+        "bias_qkv": False,
+        "rope_theta": 1000000
     }
     
     torch.manual_seed(42)
