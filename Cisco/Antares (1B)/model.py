@@ -38,7 +38,8 @@ def create_dataloader(data, tokenizer, context_size=256, stride=128,
     dataloader = DataLoader(dataset, 
                             batch_size=batch_size,
                             shuffle=shuffle,
-                            num_workers=num_workers)
+                            num_workers=num_workers,
+                            drop_last=drop_last)
     
     return dataloader
 
@@ -109,7 +110,7 @@ class GroupedQueryAttention(nn.Module):
             num_heads,
             kv_head, 
             context_length,
-            dropout,
+            attention_dropout,
             d_in,
             d_out, 
             rope_base,
@@ -126,12 +127,13 @@ class GroupedQueryAttention(nn.Module):
         self.d_in = d_in
         self.d_out = d_out
         
+        self.attention_dropout = attention_dropout
+        
         self.W_q = nn.Linear(d_in, num_heads * self.head_dim, bias=bias_qkv)
         self.W_k = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         self.W_v = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         
-        self.out_proj = nn.Linear(d_in, d_out)
-        self.dropout = nn.Dropout(dropout)
+        self.out_proj = nn.Linear(d_in, d_out,bias=bias_qkv)
         
         self.rope = Rope(
             head_dim=self.head_dim,
@@ -158,14 +160,17 @@ class GroupedQueryAttention(nn.Module):
         Q = self.rope(Q)
         K = self.rope(K)
         
-        dropout_p=self.dropout.p if self.training else 0.0
         
         context = F.scaled_dot_product_attention(
             Q,
             K,
             V,
             attn_mask=None,
-            dropout_p=dropout_p,
+            dropout_p=(
+                   self.attention_dropout
+                    if self.training
+                    else 0.0
+                ),
             is_causal=True,
             enable_gqa=True,
         )
@@ -200,7 +205,7 @@ class FeedForward(nn.Module):
         return self.down_proj(x)
     
 class RMSNorm(nn.Module):
-    def __init__(self, emb_dim, eps=1e-6):
+    def __init__(self, emb_dim, eps):
         super().__init__()
 
         self.eps = eps
@@ -228,28 +233,29 @@ class TransformerBlock(nn.Module):
             d_in = cfg['emb_dim'],
             d_out = cfg['emb_dim'],
             context_length = cfg['context_length'],
-            dropout = cfg['dropout'],
             bias_qkv = cfg['bias_qkv'],
-            rope_base = cfg['rope_base']
-            
+            rope_base = cfg['rope_base'],
+            attention_dropout=cfg["attention_dropout"]
         )
         
-        self.layer1 = RMSNorm(cfg['emb_dim'])
-        self.layer2 = RMSNorm(cfg['emb_dim'])
+        self.layer1 = RMSNorm(cfg['emb_dim'],eps=cfg["rms_norm_eps"])
+        self.layer2 = RMSNorm(cfg['emb_dim'],eps=cfg["rms_norm_eps"])
         
         self.ffn = FeedForward(cfg['emb_dim'],hidden_dim = cfg['intermediate_size'])
         
-        self.attn_dropout = nn.Dropout(cfg['dropout'])
+        self.resid_dropout = nn.Dropout(cfg["resid_dropout"])
         
     def forward(self,x):
         shortcut = x
         x = self.layer1(x)
         x = self.attn(x)
+        x = self.resid_dropout(x)
         x = x + shortcut
         
         shortcut = x
         x = self.layer2(x)
         x = self.ffn(x)
+        x = self.resid_dropout(x)
         x = x + shortcut
         
         return x
@@ -260,23 +266,21 @@ class Model(nn.Module):
         super().__init__()
         
         self.tok_emb = nn.Embedding(cfg["vocab_size"],cfg["emb_dim"])
+        self.embd_dropout = nn.Dropout(cfg["embd_dropout"])
         
         self.blocks = nn.Sequential(
             *[TransformerBlock(cfg) for _ in range(cfg["num_layers"])]
         )
         
-        self.out_norm_layer = RMSNorm(cfg["emb_dim"])
+        self.out_norm_layer = RMSNorm(cfg["emb_dim"],eps=cfg["rms_norm_eps"])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"])
-        self.dropout = nn.Dropout(cfg["dropout"])
         
     def forward(self,idx):
         batch_size,num_tokens = idx.shape
         
         token_embedding = self.tok_emb(idx)
+        x = self.embd_dropout(token_embedding)
         
-        x = token_embedding
-        
-        x = self.dropout(x)
         x = self.blocks(x)
         x = self.out_norm_layer(x)
         x = self.out_proj(x)
@@ -314,9 +318,12 @@ def main():
         "num_heads": 16,
         "kv_head": 4,
         "num_layers": 40,
-        "dropout": 0.1,
+        "attention_dropout": 0.0,
+        "resid_dropout": 0.0,
+        "embd_dropout": 0.0,
         "bias_qkv": False,
         "rope_base": 10000000,
+        "rms_norm_eps": 1e-5,
     }
     
     torch.manual_seed(42)
