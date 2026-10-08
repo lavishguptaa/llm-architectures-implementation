@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import json
 from tokenizers import Tokenizer
-import numpy as np
 from torch.utils.data import Dataset, DataLoader
+
 
 class CustomDataset(Dataset):
     
@@ -12,115 +13,107 @@ class CustomDataset(Dataset):
         self.input_ids = []
         self.target_ids = []
         
-        enc = tokenizer.encode(data)
-        token_ids = enc.ids
-        
+        token_ids = tokenizer.encode(data).ids
         for i in range(0, len(token_ids) - max_length, stride):
             input_chunk = token_ids[i:i + max_length]
             target_chunk = token_ids[i + 1: i + max_length + 1]
             self.input_ids.append(torch.tensor(input_chunk))
             self.target_ids.append(torch.tensor(target_chunk))
-            
-        
-
+                
     def __len__(self):
         return len(self.input_ids)
     
-    def __getitem__(self,idx):
+    def __getitem__(self, idx):
         return self.input_ids[idx], self.target_ids[idx]
     
 
-def create_dataloader(
-            data, 
-            tokenizer,
-            context_size=256,
-            stride=128,
-            batch_size=8, 
-            shuffle=True,
-            num_workers=0,
-            drop_last=False
-        ):
+def create_dataloader(data, tokenizer, context_size=256, stride=128,
+                      batch_size=8, shuffle=True, num_workers=0, drop_last=False):
     
-    dataset = CustomDataset(
-                data, 
-                tokenizer,
-                context_size,
-                stride
-            )
+    if tokenizer is None:
+        raise ValueError("tokenizer must be provided; load tokenizer.json before creating the dataloader")
     
-    dataloader = DataLoader(
-                dataset, 
-                batch_size=batch_size, 
-                shuffle=shuffle,
-                num_workers=num_workers
-            )
+    dataset = CustomDataset(data, tokenizer, context_size, stride)
+    
+    dataloader = DataLoader(dataset, 
+                            batch_size=batch_size,
+                            shuffle=shuffle,
+                            num_workers=num_workers,
+                            drop_last=drop_last)
     
     return dataloader
 
 class Rope(nn.Module):
-    
-    def __init__(self, head_dim, seq_length, base):
+
+    def __init__(self, head_dim, seq_len, theta):
         super().__init__()
-        
-        assert head_dim % 2 == 0,"head_dim must be even"
-        
+
+        assert head_dim % 2 == 0, "head_dim must be even"
+
         self.head_dim = head_dim
-        self.seq_length = seq_length
-        self.theta = base
-        
-        inv_freq = 1.0 / (
-           base ** ( torch.arange(0, head_dim, 2).float() / head_dim)
+        self.max_seq_length = seq_len
+        self.theta = theta
+
+        inv_freq = 1.0 / (theta ** (torch.arange(0, head_dim, 2).float() / head_dim))
+
+
+        positions = torch.arange(seq_len, dtype=torch.float32)
+
+        freqs = torch.outer(positions, inv_freq)
+
+        self.register_buffer(
+                "cos_cached", 
+                freqs.cos(),
+                persistent=False
         )
         
-        self.register_buffer("inv_freq", inv_freq)
-        
-        positions = torch.arange(seq_length).float()
-        
-        freqs = torch.outer(positions, inv_freq)
-        
-        
-        self.register_buffer("cos_cached", freqs.cos())
-        self.register_buffer("sin_cached", freqs.sin())
-        
-    def forward(self,x,position_ids=None):
+        self.register_buffer(
+                "sin_cached",
+                freqs.sin(),
+                persistent=False
+        )
+
+    def forward(self, x, position_ids=None):
         seq_len = x.size(-2)
 
         if position_ids is None:
             position_ids = torch.arange(
                 seq_len,
-                device=x.device
+                device=x.device,
+            )
+        else:
+            position_ids = position_ids.to(x.device)
+
+        if position_ids.max().item() >= self.max_seq_length:
+            raise ValueError(
+                f"Position {position_ids.max().item()} exceeds "
+                f"RoPE max_seq_len={self.max_seq_length}"
             )
 
         cos = self.cos_cached[position_ids]
         sin = self.sin_cached[position_ids]
 
-
         x1 = x[..., ::2]
         x2 = x[..., 1::2]
-
 
         rotated_x1 = x1 * cos - x2 * sin
         rotated_x2 = x1 * sin + x2 * cos
 
-
-        x_rotated = torch.stack(
-            (rotated_x1, rotated_x2),
-            dim=-1
-        ).flatten(-2)
+        x_rotated = torch.stack((rotated_x1, rotated_x2), dim=-1).flatten(-2)
 
         return x_rotated
-        
-        
+    
 class GroupedQueryAttention(nn.Module):
     def __init__(
-            self, 
-            num_heads, 
+            self,
+            num_heads,
             kv_head, 
-            context_length, 
-            dropout, d_in,
+            context_length,
+            attention_dropout,
+            d_in,
             d_out, 
+            rope_base,
             bias_qkv=False,
-            rope_base=1000000
         ):
         
         super().__init__()
@@ -130,30 +123,23 @@ class GroupedQueryAttention(nn.Module):
         self.head_dim = d_in // num_heads
         self.kv_head = kv_head
         
+        self.d_in = d_in
         self.d_out = d_out
         
-        self.W_q = nn.Linear(d_in, d_out, bias=bias_qkv)
+        self.attention_dropout = attention_dropout
+        
+        self.W_q = nn.Linear(d_in, num_heads * self.head_dim, bias=bias_qkv)
         self.W_k = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         self.W_v = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         
-        self.q_norm = RMSNorm(
-            self.head_dim
-        )
-        
-        self.k_norm = RMSNorm(
-            self.head_dim
-        )
-        
-        self.out_proj = nn.Linear(d_in, d_out)
-        self.dropout = nn.Dropout(dropout)
+        self.out_proj = nn.Linear(d_in, d_out,bias=bias_qkv)
         
         self.rope = Rope(
             head_dim=self.head_dim,
-            seq_length=context_length,
-            base=rope_base
+            seq_len=context_length,
+            theta=rope_base
         )
         
-        self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length),diagonal=1).bool())
         
     def forward(self,x):
         batch_size,num_tokens,d_in = x.shape
@@ -170,38 +156,55 @@ class GroupedQueryAttention(nn.Module):
         K = K.transpose(1, 2)
         V = V.transpose(1, 2)
         
-        Q = self.q_norm(Q)
-        K = self.k_norm(K)
-        
-        
         Q = self.rope(Q)
         K = self.rope(K)
         
-        groups = self.num_heads // self.kv_head
         
-        K = K.repeat_interleave(groups,dim=1)
-        V = V.repeat_interleave(groups,dim=1)
+        context = F.scaled_dot_product_attention(
+            Q,
+            K,
+            V,
+            attn_mask=None,
+            dropout_p=(
+                   self.attention_dropout
+                    if self.training
+                    else 0.0
+                ),
+            is_causal=True,
+            enable_gqa=True,
+        )
         
-        attention_score = Q @ K.transpose(3,2)
-        
-        mask_bool = self.mask.bool()[:num_tokens,:num_tokens]
-        attention_score = attention_score.masked_fill(mask_bool,float('-inf'))
-        
-        attention_weights = torch.softmax(attention_score / K.shape[-1] ** 0.5,dim=-1)
-        
-        context_vector = attention_weights @ V
-        
-        context_vector = context_vector.transpose(1, 2)
-        
-        context_vector = context_vector.contiguous().view(batch_size,num_tokens,self.d_out)
+        context = context.transpose(1, 2).contiguous()
+
+        context = context.view(
+            batch_size,
+            num_tokens,
+            self.d_out,
+        )
+
+
+        return self.out_proj(context)
     
-        context_vector = self.out_proj(context_vector)
-        
-        return context_vector
-    
+class FeedForward(nn.Module):
+
+    def __init__(self, emb_dim, hidden_dim):
+        super().__init__()
+
+        self.gate_proj = nn.Linear(emb_dim, hidden_dim)
+        self.up_proj = nn.Linear(emb_dim, hidden_dim)
+        self.down_proj = nn.Linear(hidden_dim, emb_dim)
+
+    def forward(self, x):
+        """Apply the gated feed-forward transformation."""
+        gate = F.silu(self.gate_proj(x))
+        value = self.up_proj(x)
+
+        x = gate * value
+
+        return self.down_proj(x)
     
 class RMSNorm(nn.Module):
-    def __init__(self, emb_dim, eps=1e-6):
+    def __init__(self, emb_dim, eps):
         super().__init__()
 
         self.eps = eps
@@ -219,27 +222,6 @@ class RMSNorm(nn.Module):
 
         return x * self.weight
     
-
-class FeedForward(nn.Module):
-
-    def __init__(self, emb_dim, hidden_dim):
-        super().__init__()
-
-        self.gate_proj = nn.Linear(emb_dim, hidden_dim)
-        self.up_proj = nn.Linear(emb_dim, hidden_dim)
-        self.down_proj = nn.Linear(hidden_dim, emb_dim)
-
-    def forward(self, x):
-
-        gate = F.silu(self.gate_proj(x))
-
-        value = self.up_proj(x)
-
-        x = gate * value
-
-        return self.down_proj(x)
-    
-    
 class TransformerBlock(nn.Module):  
     def __init__(self,cfg):
         super().__init__()
@@ -250,32 +232,32 @@ class TransformerBlock(nn.Module):
             d_in = cfg['emb_dim'],
             d_out = cfg['emb_dim'],
             context_length = cfg['context_length'],
-            dropout = cfg['dropout'],
-            bias_qkv = cfg['bias_qkv']
+            bias_qkv = cfg['bias_qkv'],
+            rope_base = cfg['rope_base'],
+            attention_dropout=cfg["attention_dropout"]
         )
         
-        self.layer1 = RMSNorm(cfg['emb_dim'])
-        self.layer2 = RMSNorm(cfg['emb_dim'])
+        self.layer1 = RMSNorm(cfg['emb_dim'],eps=cfg["rms_norm_eps"])
+        self.layer2 = RMSNorm(cfg['emb_dim'],eps=cfg["rms_norm_eps"])
         
-        self.ffn = FeedForward(cfg['emb_dim'],cfg['hidden_dim'])
+        self.ffn = FeedForward(cfg['emb_dim'],hidden_dim = cfg['intermediate_size'])
         
-        self.attn_dropout = nn.Dropout(cfg['dropout'])
+        self.resid_dropout = nn.Dropout(cfg["resid_dropout"])
         
     def forward(self,x):
         shortcut = x
         x = self.layer1(x)
         x = self.attn(x)
-        x = self.attn_dropout(x)
+        x = self.resid_dropout(x)
         x = x + shortcut
         
         shortcut = x
         x = self.layer2(x)
         x = self.ffn(x)
-        x = self.attn_dropout(x)
+        x = self.resid_dropout(x)
         x = x + shortcut
         
         return x
-    
     
 class Model(nn.Module):
     
@@ -283,23 +265,21 @@ class Model(nn.Module):
         super().__init__()
         
         self.tok_emb = nn.Embedding(cfg["vocab_size"],cfg["emb_dim"])
+        self.embd_dropout = nn.Dropout(cfg["embd_dropout"])
         
         self.blocks = nn.Sequential(
             *[TransformerBlock(cfg) for _ in range(cfg["num_layers"])]
         )
         
-        self.out_norm_layer = RMSNorm(cfg["emb_dim"])
+        self.out_norm_layer = RMSNorm(cfg["emb_dim"],eps=cfg["rms_norm_eps"])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"])
-        self.dropout = nn.Dropout(cfg["dropout"])
         
     def forward(self,idx):
         batch_size,num_tokens = idx.shape
         
         token_embedding = self.tok_emb(idx)
+        x = self.embd_dropout(token_embedding)
         
-        x = token_embedding
-        
-        x = self.dropout(x)
         x = self.blocks(x)
         x = self.out_norm_layer(x)
         x = self.out_proj(x)
@@ -307,7 +287,7 @@ class Model(nn.Module):
     
     
 def generate_text_simple(model, idx, max_new_tokens, context_size):
-    
+
     for _ in range(max_new_tokens):
 
         
@@ -324,44 +304,48 @@ def generate_text_simple(model, idx, max_new_tokens, context_size):
         idx_next = torch.argmax(logits, dim=-1, keepdim=True)  
 
             
-        idx = torch.cat((idx, idx_next), dim=1) 
+        idx = torch.cat((idx, idx_next), dim=1)  
+
     return idx
     
 def main():
     cfg = {
         "vocab_size": 151936,
         "emb_dim": 2560,
-        "hidden_dim" : 9728,
+        "intermediate_size" : 9728,
         "context_length": 40960,
         "num_heads": 32,
         "kv_head": 8,
         "num_layers": 36,
-        "dropout": 0.1,
-        "bias_qkv": False
+        "attention_dropout": 0.0,
+        "resid_dropout": 0.0,
+        "embd_dropout": 0.0,
+        "bias_qkv": False,
+        "rope_base": 1000000.0,
+        "rms_norm_eps": 1e-06,
     }
     
     torch.manual_seed(42)
     model = Model(cfg)
     model.eval()
     
+    
     input_text = "Hello, how are you?"
-        
-    tokenizer = Tokenizer.from_file('tokenizer.json')
-        
-    print("Tokenizer vocab size:", tokenizer.get_vocab_size())
-    print("Model vocab size:", cfg["vocab_size"])
     
-    if tokenizer.get_vocab_size() != cfg["vocab_size"]:
-        raise ValueError(
-            f"Tokenizer vocab size ({tokenizer.get_vocab_size()}) "
-            f"does not match model vocab size ({cfg['vocab_size']})."
-        )
-    
-    encoding = tokenizer.encode(input_text)
-    input_ids = encoding.ids
-    
+    tokenizer_path = "tokenizer.json"
+
+    tokenizer = Tokenizer.from_file(tokenizer_path)
+
+    # tokenizer_vocab_size = tokenizer.get_vocab_size()
+    # if tokenizer_vocab_size != cfg["vocab_size"]:
+    #     raise ValueError(
+    #         f"Tokenizer vocab size ({tokenizer_vocab_size}) does not match "
+    #         f"model vocab_size ({cfg['vocab_size']})."
+    #     )
+
+    input_ids = tokenizer.encode(input_text).ids
     encoded_tensor = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0)
-    
+
     
     out = generate_text_simple(
             model=model,
@@ -375,6 +359,8 @@ def main():
     print("\nOutput:", out)
     print("Output length:", len(out[0]))
     print("Output text:", decoded_text)
+    
+
 
 if __name__ == "__main__":
     main()
