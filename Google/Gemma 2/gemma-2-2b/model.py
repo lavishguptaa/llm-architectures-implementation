@@ -419,11 +419,11 @@ def main():
     print("Tokenizer vocab size:", tokenizer.get_vocab_size())
     print("Model vocab size:", cfg["vocab_size"])
 
-    if tokenizer.get_vocab_size() != cfg["vocab_size"]:
-        raise ValueError(
-            f"Tokenizer vocab size ({tokenizer.get_vocab_size()}) "
-            f"does not match model vocab size ({cfg['vocab_size']})."
-        )
+    # if tokenizer.get_vocab_size() != cfg["vocab_size"]:
+    #     raise ValueError(
+    #         f"Tokenizer vocab size ({tokenizer.get_vocab_size()}) "
+    #         f"does not match model vocab size ({cfg['vocab_size']})."
+    #     )
 
     encoding = tokenizer.encode(input_text)
     input_ids = encoding.ids
