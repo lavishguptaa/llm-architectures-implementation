@@ -121,15 +121,13 @@ class MultiHeadAttention(nn.Module):
         
         
         self.out_proj = nn.Linear(d_out, d_out, bias=False)
-        self.attention_dropout = nn.Dropout(attention_dropout)
+        self.attention_dropout_p = attention_dropout
         
         self.rope = Rope(
             head_dim=self.head_dim,
             seq_len=context_length,
             theta=rope_base
         )
-        
-        self.register_buffer("mask",torch.triu(torch.ones(context_length,context_length),diagonal=1).bool())
         
     def forward(self,x):
         batch_size,num_tokens,d_in = x.shape
@@ -149,16 +147,13 @@ class MultiHeadAttention(nn.Module):
         Q = self.rope(Q)
         K = self.rope(K)
         
-        attention_scores = Q@K.transpose(2,3)
+        context_vector = F.scaled_dot_product_attention(
+            Q, K, V,
+            dropout_p=self.attention_dropout_p if self.training else 0.0,
+            is_causal=True
+        )
         
-        mask_bool = self.mask.bool()[:num_tokens,:num_tokens]
-        
-        attention_scores = attention_scores.masked_fill(mask_bool, float('-inf'))
-        
-        attention_weights = torch.softmax(attention_scores / K.shape[-1]**0.5, dim=-1)
-        attention_weights =  self.attention_dropout(attention_weights)
-        
-        context_vector = (attention_weights @ V).transpose(1,2)
+        context_vector = context_vector.transpose(1,2)
         
         context_vector = context_vector.contiguous().view(batch_size,num_tokens,self.d_out)
         
