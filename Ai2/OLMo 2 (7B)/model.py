@@ -44,65 +44,47 @@ def create_dataloader(data, tokenizer, context_size=256, stride=128,
     return dataloader
 
 
-class Rope(nn.Module):
+def compute_rope_params(head_dim, cfg):
 
-    def __init__(self, head_dim, seq_len, theta):
-        super().__init__()
+    theta_base = cfg["rope_theta"]
+    context_length = cfg["context_length"]
 
-        assert head_dim % 2 == 0, "head_dim must be even"
+    assert head_dim % 2 == 0, "head_dim must be even"
 
-        self.head_dim = head_dim
-        self.max_seq_length = seq_len
-        self.theta = theta
-
-        inv_freq = 1.0 / (theta ** (torch.arange(0, head_dim, 2).float() / head_dim))
-
-
-        positions = torch.arange(seq_len, dtype=torch.float32)
-
-        freqs = torch.outer(positions, inv_freq)
-
-        self.register_buffer(
-                "cos_cached", 
-                freqs.cos(),
-                persistent=False
+    inv_freq = 1.0 / (
+        theta_base ** (
+            torch.arange(0, head_dim, 2).float() / head_dim
         )
-        
-        self.register_buffer(
-                "sin_cached",
-                freqs.sin(),
-                persistent=False
-        )
+    )
 
-    def forward(self, x, position_ids=None):
-        seq_len = x.size(-2)
+    positions = torch.arange(context_length).float()
 
-        if position_ids is None:
-            position_ids = torch.arange(
-                seq_len,
-                device=x.device,
-            )
-        else:
-            position_ids = position_ids.to(x.device)
+    angles = torch.outer(positions, inv_freq)
+    angles = torch.cat([angles, angles], dim=-1)
 
-        if position_ids.max().item() >= self.max_seq_length:
-            raise ValueError(
-                f"Position {position_ids.max().item()} exceeds "
-                f"RoPE max_seq_len={self.max_seq_length}"
-            )
+    cos = angles.cos()
+    sin = angles.sin()
 
-        cos = self.cos_cached[position_ids]
-        sin = self.sin_cached[position_ids]
+    return cos, sin
 
-        x1 = x[..., ::2]
-        x2 = x[..., 1::2]
 
-        rotated_x1 = x1 * cos - x2 * sin
-        rotated_x2 = x1 * sin + x2 * cos
+def apply_rope(x, cos, sin):
 
-        x_rotated = torch.stack((rotated_x1, rotated_x2), dim=-1).flatten(-2)
+    batch_size, num_heads, seq_len, head_dim = x.shape
 
-        return x_rotated
+    cos = cos[:seq_len, :].to(x.device, dtype=x.dtype)
+    sin = sin[:seq_len, :].to(x.device, dtype=x.dtype)
+
+    cos = cos.unsqueeze(0).unsqueeze(0)
+    sin = sin.unsqueeze(0).unsqueeze(0)
+
+    x1 = x[..., :head_dim // 2]
+    x2 = x[..., head_dim // 2:]
+
+    rotated = torch.cat([-x2, x1], dim=-1)
+
+    return (x * cos) + (rotated * sin)
+
 
 class MultiHeadAttention(nn.Module):
     
@@ -130,11 +112,12 @@ class MultiHeadAttention(nn.Module):
         self.out_proj = nn.Linear(d_out, d_out, bias=False)
         self.attention_dropout_p = cfg["attention_dropout"]
         
-        self.rope = Rope(
+        cos, sin = compute_rope_params(
             head_dim=self.head_dim,
-            seq_len=cfg["context_length"],
-            theta=cfg["rope_theta"]
+            cfg=cfg
         )
+        self.register_buffer("cos", cos, persistent=False)
+        self.register_buffer("sin", sin, persistent=False)
         
     def forward(self,x):
         batch_size,num_tokens,d_in = x.shape
@@ -154,8 +137,8 @@ class MultiHeadAttention(nn.Module):
         K = K.transpose(1,2)
         V = V.transpose(1,2)
         
-        Q = self.rope(Q)
-        K = self.rope(K)
+        Q = apply_rope(Q, self.cos, self.sin)
+        K = apply_rope(K, self.cos, self.sin)
         
         context_vector = F.scaled_dot_product_attention(
             Q, K, V,
