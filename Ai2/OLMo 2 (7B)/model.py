@@ -106,30 +106,34 @@ class Rope(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     
-    def __init__(self,num_heads,d_in,d_out,context_length,attention_dropout,rope_base,rms_norm_eps,bias_qkv=False):
+    def __init__(self, cfg):
         super().__init__()
         
-        assert d_in % num_heads == 0, "d_in must be divisible by num_heads"
+        num_heads = cfg["num_heads"]
+        d_in = cfg["emb_dim"]
+        d_out = cfg["emb_dim"]
+        
+        if d_in % num_heads != 0:
+            raise ValueError("emb_dim must be divisible by num_heads")
         
         self.num_heads = num_heads
         self.head_dim = d_in // num_heads
         self.d_out = d_out
         
-        self.W_q = nn.Linear(d_in,d_out,bias=bias_qkv)
-        self.W_k = nn.Linear(d_in,d_out,bias=bias_qkv)
-        self.W_v = nn.Linear(d_in,d_out,bias=bias_qkv)
+        self.W_q = nn.Linear(d_in, d_out, bias=cfg["bias_qkv"])
+        self.W_k = nn.Linear(d_in, d_out, bias=cfg["bias_qkv"])
+        self.W_v = nn.Linear(d_in, d_out, bias=cfg["bias_qkv"])
         
-        
-        self.q_norm = RMSNorm(d_out, rms_norm_eps)
-        self.k_norm = RMSNorm(d_out, rms_norm_eps)
+        self.q_norm = RMSNorm(d_out, cfg["rms_norm_eps"])
+        self.k_norm = RMSNorm(d_out, cfg["rms_norm_eps"])
         
         self.out_proj = nn.Linear(d_out, d_out, bias=False)
-        self.attention_dropout_p = attention_dropout
+        self.attention_dropout_p = cfg["attention_dropout"]
         
         self.rope = Rope(
             head_dim=self.head_dim,
-            seq_len=context_length,
-            theta=rope_base
+            seq_len=cfg["context_length"],
+            theta=cfg["rope_theta"]
         )
         
     def forward(self,x):
@@ -212,16 +216,7 @@ class TransformerBlock(nn.Module):
     def __init__(self,cfg):
         super().__init__()
         
-        self.attn = MultiHeadAttention(
-            num_heads = cfg['num_heads'],
-            d_in = cfg['emb_dim'],
-            d_out = cfg['emb_dim'],
-            context_length = cfg['context_length'],
-            attention_dropout = cfg['attention_dropout'],
-            bias_qkv = cfg['bias_qkv'],
-            rope_base = cfg['rope_theta'],
-            rms_norm_eps = cfg['rms_norm_eps']
-        )
+        self.attn = MultiHeadAttention(cfg)
         
         self.pre_attn_norm = RMSNorm(cfg['emb_dim'],cfg['rms_norm_eps'])
         self.pre_ffn_norm = RMSNorm(cfg['emb_dim'],cfg['rms_norm_eps'])
