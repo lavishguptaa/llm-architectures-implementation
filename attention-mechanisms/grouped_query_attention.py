@@ -4,14 +4,29 @@ import torch.nn.functional as F
 
 
 class GroupedQueryAttention(nn.Module):
+    """Grouped-query attention: query heads are split into groups, each sharing one key/value head.
+
+    n_kv_heads == n_heads gives multi-head attention; n_kv_heads == 1 gives multi-query attention.
+    """
+
+    """Grouped-query attention: query heads are split into groups, each sharing one key/value head.
+
+    n_kv_heads == n_heads gives multi-head attention; n_kv_heads == 1 gives multi-query attention.
+    """
+
+    """Grouped-query attention: query heads are split into groups, each sharing one key/value head.
+
+    n_kv_heads == n_heads gives multi-head attention; n_kv_heads == 1 gives multi-query attention.
+    """
+
     def __init__(self, d_model, n_heads, n_kv_heads):
         super().__init__()
 
-        assert d_model % n_heads == 0, \
-            "d_model must be divisible by n_heads"
+        if d_model % n_heads != 0:
+            raise ValueError("d_model must be divisible by n_heads")
 
-        assert n_heads % n_kv_heads == 0, \
-            "n_heads must be divisible by n_kv_heads"
+        if n_heads % n_kv_heads != 0:
+            raise ValueError("n_heads must be divisible by n_kv_heads")
 
         self.n_heads = n_heads
         self.n_kv_heads = n_kv_heads

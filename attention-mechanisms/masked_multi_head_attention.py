@@ -4,11 +4,17 @@ import torch.nn.functional as F
 
 
 class MaskedMultiHeadAttention(nn.Module):
+    """Multi-head self-attention with a causal mask (no attending to future tokens)."""
+
+    """Multi-head self-attention with a causal mask (no attending to future tokens)."""
+
+    """Multi-head self-attention with a causal mask (no attending to future tokens)."""
+
     def __init__(self, d_model, n_heads):
         super().__init__()
 
-        assert d_model % n_heads == 0, \
-            "d_model must be divisible by n_heads"
+        if d_model % n_heads != 0:
+            raise ValueError("d_model must be divisible by n_heads")
 
         self.n_heads = n_heads
         self.d_head = d_model // n_heads

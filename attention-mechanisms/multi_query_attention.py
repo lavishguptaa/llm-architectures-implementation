@@ -4,11 +4,17 @@ import torch.nn.functional as F
 
 
 class MultiQueryAttention(nn.Module):
+    """Multi-query attention: all query heads share a single key/value head."""
+
+    """Multi-query attention: all query heads share a single key/value head."""
+
+    """Multi-query attention: all query heads share a single key/value head."""
+
     def __init__(self, d_model, n_heads):
         super().__init__()
 
-        assert d_model % n_heads == 0, \
-            "d_model must be divisible by n_heads"
+        if d_model % n_heads != 0:
+            raise ValueError("d_model must be divisible by n_heads")
 
         self.n_heads = n_heads
         self.d_head = d_model // n_heads

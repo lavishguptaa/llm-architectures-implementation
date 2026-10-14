@@ -4,6 +4,16 @@ import torch.nn.functional as F
 
 
 class SlidingWindowAttention(nn.Module):
+    """Multi-head self-attention restricted to a local window around each token.
+
+    causal=True:  each token attends to itself and the previous window_size - 1 tokens.
+    causal=False: each token attends to tokens within window_size positions on either side.
+
+    Queries are processed in chunks of window_size so each chunk only touches nearby keys,
+    avoiding the full [seq_len, seq_len] score matrix. Unlike the other attention modules,
+    it returns only the output, because attention weights are computed per chunk.
+    """
+
     def __init__(
         self,
         d_model: int,
@@ -101,25 +111,31 @@ class SlidingWindowAttention(nn.Module):
                 K_window.transpose(-2, -1),
             ) / (self.d_head ** 0.5)
 
+            q_positions = torch.arange(
+                start,
+                end,
+                device=Q.device,
+            ).unsqueeze(1)
+
+            k_positions = torch.arange(
+                K_start,
+                K_end,
+                device=Q.device,
+            ).unsqueeze(0)
+
+            # The key block is wider than any single query's window,
+            # so mask out the keys that fall outside each query's own window
             if self.causal:
-                q_positions = torch.arange(
-                    start,
-                    end,
-                    device=Q.device,
+                outside_window = (
+                    (k_positions > q_positions)
+                    | (k_positions <= q_positions - self.window_size)
+                )
+            else:
+                outside_window = (
+                    (k_positions - q_positions).abs() > self.window_size
                 )
 
-                k_positions = torch.arange(
-                    K_start,
-                    K_end,
-                    device=Q.device,
-                )
-
-                causal_mask = k_positions.unsqueeze(0) > q_positions.unsqueeze(1)
-
-                scores = scores.masked_fill(
-                    causal_mask.unsqueeze(0).unsqueeze(0),
-                    float("-inf"),
-                )
+            scores = scores.masked_fill(outside_window, float("-inf"))
 
             attention_weights = F.softmax(
                 scores,

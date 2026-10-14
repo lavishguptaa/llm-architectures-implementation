@@ -3,12 +3,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class MultiLatentAttention(nn.Module):
+class MultiHeadLatentAttention(nn.Module):
+    """Simplified multi-head latent attention.
+
+    Keys and values are reconstructed from a shared low-rank latent vector of size
+    latent_dim. This shows the core idea (only the small latent needs to be cached),
+    but omits parts of the full DeepSeek design: query compression and decoupled RoPE.
+    """
+
     def __init__(self, d_model, n_heads, latent_dim):
         super().__init__()
 
-        assert d_model % n_heads == 0, \
-            "d_model must be divisible by n_heads"
+        if d_model % n_heads != 0:
+            raise ValueError("d_model must be divisible by n_heads")
 
         self.n_heads = n_heads
         self.d_head = d_model // n_heads
@@ -123,7 +130,7 @@ if __name__ == "__main__":
         d_model
     )
 
-    attention = MultiLatentAttention(
+    attention = MultiHeadLatentAttention(
         d_model=d_model,
         n_heads=n_heads,
         latent_dim=latent_dim

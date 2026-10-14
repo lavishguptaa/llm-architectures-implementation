@@ -3,7 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class ScaledDotProductAttention(nn.Module):
+class SelfAttention(nn.Module):
+    """Single-head scaled dot-product self-attention."""
+
     def __init__(self, d_model):
         super().__init__()
 
@@ -42,7 +44,7 @@ if __name__ == "__main__":
 
     x = torch.randn(batch_size, seq_len, d_model)
 
-    attention = ScaledDotProductAttention(d_model)
+    attention = SelfAttention(d_model)
 
     output, attention_weights = attention(x)
 

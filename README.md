@@ -399,19 +399,19 @@ _Mistral Small 3.1: text decoder only (no vision tower)._
 
 ## Attention mechanisms
 
-The [`attention-mechanisms/`](attention-mechanisms) folder holds small, standalone implementations that are easier to study in isolation than inside a full model:
+The [`attention-mechanisms/`](attention-mechanisms) folder holds small, standalone implementations that are easier to study in isolation than inside a full model. Each file has a runnable demo (`python <file>.py`) that prints the tensor shapes:
 
-| File | Mechanism |
-|---|---|
-| [`bahdanau_attention.py`](attention-mechanisms/bahdanau_attention.py) | Additive attention (Bahdanau) |
-| [`luong_attention.py`](attention-mechanisms/luong_attention.py) | Multiplicative attention (Luong) |
-| [`self_attention.py`](attention-mechanisms/self_attention.py) | Scaled dot-product self-attention |
-| [`masked_multi_head_attention.py`](attention-mechanisms/masked_multi_head_attention.py) | Causal (masked) multi-head attention |
-| [`multi_head_attention(MHA).py`](attention-mechanisms/multi_head_attention%28MHA%29.py) | Multi-head attention (MHA) |
-| [`multi_query_attention(MQA).py`](attention-mechanisms/multi_query_attention%28MQA%29.py) | Multi-query attention (MQA) |
-| [`grouped_query_attention(GQA).py`](attention-mechanisms/grouped_query_attention%28GQA%29.py) | Grouped-query attention (GQA) |
-| [`multiHead_latent_attention(MLA).py`](attention-mechanisms/multiHead_latent_attention%28MLA%29.py) | Multi-head latent attention (MLA) |
-| [`sliding_window_attention(SWA).py`](attention-mechanisms/sliding_window_attention%28SWA%29.py) | Sliding-window attention (SWA) |
+| File | Class | Mechanism |
+|---|---|---|
+| [`additive_attention.py`](attention-mechanisms/additive_attention.py) | `AdditiveAttention` | Additive attention (Bahdanau) |
+| [`multiplicative_attention.py`](attention-mechanisms/multiplicative_attention.py) | `MultiplicativeAttention` | Multiplicative attention (Luong) |
+| [`self_attention.py`](attention-mechanisms/self_attention.py) | `SelfAttention` | Single-head scaled dot-product self-attention |
+| [`masked_multi_head_attention.py`](attention-mechanisms/masked_multi_head_attention.py) | `MaskedMultiHeadAttention` | Causal (masked) multi-head attention |
+| [`multi_head_attention.py`](attention-mechanisms/multi_head_attention.py) | `MultiHeadAttention` | Multi-head attention (MHA) |
+| [`multi_query_attention.py`](attention-mechanisms/multi_query_attention.py) | `MultiQueryAttention` | Multi-query attention (MQA) |
+| [`grouped_query_attention.py`](attention-mechanisms/grouped_query_attention.py) | `GroupedQueryAttention` | Grouped-query attention (GQA) |
+| [`multi_head_latent_attention.py`](attention-mechanisms/multi_head_latent_attention.py) | `MultiHeadLatentAttention` | Multi-head latent attention (MLA) — simplified: low-rank K/V only, without query compression or decoupled RoPE |
+| [`sliding_window_attention.py`](attention-mechanisms/sliding_window_attention.py) | `SlidingWindowAttention` | Sliding-window attention (SWA), causal or bidirectional |
 
 ## Verification status
 
