@@ -112,14 +112,8 @@ class MultiHeadAttention(nn.Module):
         self.out_proj = nn.Linear(d_out, d_out, bias=False)
         self.attention_dropout_p = cfg["attention_dropout"]
         
-        cos, sin = compute_rope_params(
-            head_dim=self.head_dim,
-            cfg=cfg
-        )
-        self.register_buffer("cos", cos, persistent=False)
-        self.register_buffer("sin", sin, persistent=False)
         
-    def forward(self,x):
+    def forward(self,x,cos,sin):
         batch_size,num_tokens,d_in = x.shape
         
         Q = self.W_q(x)
@@ -137,8 +131,8 @@ class MultiHeadAttention(nn.Module):
         K = K.transpose(1,2)
         V = V.transpose(1,2)
         
-        Q = apply_rope(Q, self.cos, self.sin)
-        K = apply_rope(K, self.cos, self.sin)
+        Q = apply_rope(Q, cos, sin)
+        K = apply_rope(K, cos, sin)
         
         context_vector = F.scaled_dot_product_attention(
             Q, K, V,
@@ -207,10 +201,10 @@ class TransformerBlock(nn.Module):
         self.ffn = FeedForward(cfg['emb_dim'],cfg['intermediate_size'])
         
         
-    def forward(self,x):
+    def forward(self,x,cos,sin):
         shortcut = x
         x = self.pre_attn_norm(x)
-        x = self.attn(x)
+        x = self.attn(x,cos,sin)
         x = x + shortcut
         
         shortcut = x
@@ -228,9 +222,16 @@ class Model(nn.Module):
         
         self.tok_emb = nn.Embedding(cfg["vocab_size"],cfg["emb_dim"])
         
-        self.blocks = nn.Sequential(
-            *[TransformerBlock(cfg) for _ in range(cfg["num_layers"])]
+        self.blocks = nn.ModuleList(
+            [TransformerBlock(cfg) for _ in range(cfg["num_layers"])]
         )
+        
+        cos, sin = compute_rope_params(
+            head_dim=cfg["emb_dim"] // cfg["num_heads"],
+            cfg=cfg
+        )
+        self.register_buffer("cos", cos, persistent=False)
+        self.register_buffer("sin", sin, persistent=False)
         
         self.out_norm_layer = RMSNorm(cfg["emb_dim"],cfg['rms_norm_eps'])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
@@ -243,7 +244,8 @@ class Model(nn.Module):
         
         x = token_embedding
         
-        x = self.blocks(x)
+        for block in self.blocks:
+            x = block(x, self.cos, self.sin)
         x = self.out_norm_layer(x)
         x = self.out_proj(x)
         return x

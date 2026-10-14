@@ -190,11 +190,6 @@ class GroupedQueryAttention(nn.Module):
         self.W_v = nn.Linear(d_in, self.num_key_value_heads * self.head_dim, bias=cfg["bias_qkv"])
         self.out_proj = nn.Linear(d_out, d_out, bias=False)
 
-        self.cos, self.sin = compute_rope_params(
-            head_dim=self.head_dim,
-            cfg=cfg
-        )
-        
         self.q_norm = RMSNorm(
             self.head_dim,
             eps=cfg["rms_norm_eps"]
@@ -205,7 +200,7 @@ class GroupedQueryAttention(nn.Module):
             eps=cfg["rms_norm_eps"]
         )
 
-    def forward(self, x):
+    def forward(self, x, cos, sin):
         batch_size, num_tokens, _ = x.shape
 
         Q = self.W_q(x).view(
@@ -223,8 +218,8 @@ class GroupedQueryAttention(nn.Module):
         Q = self.q_norm(Q)
         K = self.k_norm(K)
         
-        Q = apply_rope(Q, self.cos, self.sin)
-        K = apply_rope(K, self.cos, self.sin)
+        Q = apply_rope(Q, cos, sin)
+        K = apply_rope(K, cos, sin)
 
         attn_mask = None
         is_causal = True
@@ -300,9 +295,9 @@ class TransformerBlock(nn.Module):
         )
         
         
-    def forward(self,x):
+    def forward(self,x,cos,sin):
         shortcut = x
-        x = self.attn(x)
+        x = self.attn(x,cos,sin)
         x = self.layer1(x)
         x = x + shortcut
         
@@ -331,7 +326,14 @@ class Model(nn.Module):
         for layer_idx in range(cfg["num_layers"]):
             blocks.append(TransformerBlock(cfg, layer_idx))
 
-        self.blocks = nn.Sequential(*blocks)
+        self.blocks = nn.ModuleList(blocks)
+        
+        cos, sin = compute_rope_params(
+            head_dim=cfg["emb_dim"] // cfg["num_heads"],
+            cfg=cfg
+        )
+        self.register_buffer("cos", cos, persistent=False)
+        self.register_buffer("sin", sin, persistent=False)
         
         self.out_norm_layer = RMSNorm(cfg["emb_dim"],cfg['rms_norm_eps'])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
@@ -344,7 +346,8 @@ class Model(nn.Module):
         
         x = token_embedding
         
-        x = self.blocks(x)
+        for block in self.blocks:
+            x = block(x, self.cos, self.sin)
         x = self.out_norm_layer(x)
         x = self.out_proj(x)
         return x
