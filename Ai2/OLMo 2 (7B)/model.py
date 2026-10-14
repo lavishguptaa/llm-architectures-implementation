@@ -106,7 +106,7 @@ class Rope(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     
-    def __init__(self,num_heads,d_in,d_out,context_length,attention_dropout,rope_base,bias_qkv=False):
+    def __init__(self,num_heads,d_in,d_out,context_length,attention_dropout,rope_base,rms_norm_eps,bias_qkv=False):
         super().__init__()
         
         assert d_in % num_heads == 0, "d_in must be divisible by num_heads"
@@ -119,6 +119,9 @@ class MultiHeadAttention(nn.Module):
         self.W_k = nn.Linear(d_in,d_out,bias=bias_qkv)
         self.W_v = nn.Linear(d_in,d_out,bias=bias_qkv)
         
+        
+        self.q_norm = RMSNorm(d_out, rms_norm_eps)
+        self.k_norm = RMSNorm(d_out, rms_norm_eps)
         
         self.out_proj = nn.Linear(d_out, d_out, bias=False)
         self.attention_dropout_p = attention_dropout
@@ -135,6 +138,9 @@ class MultiHeadAttention(nn.Module):
         Q = self.W_q(x)
         K = self.W_k(x)
         V = self.W_v(x)
+        
+        Q = self.q_norm(Q)
+        K = self.k_norm(K)
         
         Q = Q.view(batch_size,num_tokens,self.num_heads,self.head_dim)
         K = K.view(batch_size,num_tokens,self.num_heads,self.head_dim)
@@ -213,7 +219,8 @@ class TransformerBlock(nn.Module):
             context_length = cfg['context_length'],
             attention_dropout = cfg['attention_dropout'],
             bias_qkv = cfg['bias_qkv'],
-            rope_base = cfg['rope_theta']
+            rope_base = cfg['rope_theta'],
+            rms_norm_eps = cfg['rms_norm_eps']
         )
         
         self.layer1 = RMSNorm(cfg['emb_dim'],cfg['rms_norm_eps'])
