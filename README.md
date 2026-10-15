@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.5%2B-ee4c2c)
-![Models implemented](https://img.shields.io/badge/models%20implemented-52-brightgreen)
+![Models implemented](https://img.shields.io/badge/models%20implemented-55-brightgreen)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -34,19 +34,19 @@ The goal is to make the differences *between* architectures easy to see: the sam
 
 | | Count |
 |---|---|
-| ✅ Models with a `model.py` implementation | **52** |
-| 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **33** |
+| ✅ Models with a `model.py` implementation | **55** |
+| 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **30** |
 | 📁 Reserved folders (no config or code yet) | **3** |
 | Standalone attention-mechanism implementations | **9** files |
 
-Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antares, GLM-4.5 / 4.5-Air / 4.7 (MoE), Gemma 1 / 2 / 3 (1B), Granite 4.1, LLaMA 1 / 2 / 3 / 3.1 / 3.2, Phi-1 / 1.5 / 4, Mistral Small 3.1.**
+Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antares, GLM-4.5 / 4.5-Air / 4.7 (MoE), Gemma 1 / 2 / 3 (1B, 4B, 12B, 27B), Granite 4.1, LLaMA 1 / 2 / 3 / 3.1 / 3.2, Phi-1 / 1.5 / 4, Mistral Small 3.1.**
 
 ## Highlights
 
 - **One file per model.** Open a folder, read `model.py` top to bottom, and you have the whole architecture — no framework indirection, no inheritance maze.
 - **Configuration-driven.** Each model is built from a plain `cfg` dictionary that mirrors the official `config.json` keys, so adapting a model to a new size is a config change.
 - **Architectural features covered**
-  - Positional encoding: RoPE, `llama3`-style frequency scaling (LLaMA 3.1 / 3.2), YaRN (OLMo 3), partial rotary embeddings (GLM), per-layer-type RoPE bases (Gemma 3)
+  - Positional encoding: RoPE, `llama3`-style frequency scaling (LLaMA 3.1 / 3.2), YaRN (OLMo 3), partial rotary embeddings (GLM), per-layer-type RoPE bases and linear scaling on global layers (Gemma 3)
   - Attention: MHA, GQA, sliding-window / full-attention layer patterns (Gemma 2/3, OLMo 3), attention-logit and final-logit soft-capping (Gemma 2), QK-norm (OLMo 2/3, Gemma 3, optional in GLM)
   - Normalisation: RMSNorm, LayerNorm (Phi-1 / 1.5), pre-norm and post-norm block layouts (Gemma 2 uses four norms per block)
   - Feed-forward: gated SwiGLU-style MLPs, and a **sparse MoE block** (GLM-4.5 family) with sigmoid routing, bias-corrected group-limited top-k expert selection, shared experts, and dense leading layers
@@ -231,10 +231,10 @@ _GLM-4.5 family: Mixture-of-Experts with sigmoid routing, group-limited top-k, s
 </details>
 
 <details>
-<summary><b>Google</b> &nbsp;·&nbsp; 6 implemented / 14 total</summary>
+<summary><b>Google</b> &nbsp;·&nbsp; 9 implemented / 14 total</summary>
 
 
-_Gemma 1; Gemma 2 (logit soft-capping, sliding/global layers, four norms per block); Gemma 3 1B (QK-norm, local/global RoPE bases)._
+_Gemma 1; Gemma 2 (logit soft-capping, sliding/global layers, four norms per block); Gemma 3 1B / 4B / 12B / 27B text models (QK-norm, local/global RoPE bases, linear RoPE scaling on global layers; no vision tower)._
 
 
 | Model | Status | Folder |
@@ -243,10 +243,10 @@ _Gemma 1; Gemma 2 (logit soft-capping, sliding/global layers, four norms per blo
 | gemma-2-2b | ✅ Implemented | [`Google/Gemma 2/gemma-2-2b`](Google/Gemma%202/gemma-2-2b) |
 | gemma-2-9b | ✅ Implemented | [`Google/Gemma 2/gemma-2-9b`](Google/Gemma%202/gemma-2-9b) |
 | Gemma 3 (270M) | 🚧 Config + tokenizer only | [`Google/Gemma 3/Gemma 3 (270M)`](Google/Gemma%203/Gemma%203%20%28270M%29) |
-| gemma-3-12b | 🚧 Config + tokenizer only | [`Google/Gemma 3/gemma-3-12b`](Google/Gemma%203/gemma-3-12b) |
+| gemma-3-12b | ✅ Implemented | [`Google/Gemma 3/gemma-3-12b`](Google/Gemma%203/gemma-3-12b) |
 | gemma-3-1b | ✅ Implemented | [`Google/Gemma 3/gemma-3-1b`](Google/Gemma%203/gemma-3-1b) |
-| gemma-3-27b | 🚧 Config + tokenizer only | [`Google/Gemma 3/gemma-3-27b`](Google/Gemma%203/gemma-3-27b) |
-| gemma-3-4b | 🚧 Config + tokenizer only | [`Google/Gemma 3/gemma-3-4b`](Google/Gemma%203/gemma-3-4b) |
+| gemma-3-27b | ✅ Implemented | [`Google/Gemma 3/gemma-3-27b`](Google/Gemma%203/gemma-3-27b) |
+| gemma-3-4b | ✅ Implemented | [`Google/Gemma 3/gemma-3-4b`](Google/Gemma%203/gemma-3-4b) |
 | Gemma 4 (12B) | 🚧 Config + tokenizer only | [`Google/Gemma 4/Gemma 4 (12B)`](Google/Gemma%204/Gemma%204%20%2812B%29) |
 | Gemma 4 (31B) | 🚧 Config + tokenizer only | [`Google/Gemma 4/Gemma 4 (31B)`](Google/Gemma%204/Gemma%204%20%2831B%29) |
 | Gemma 4 (E2B) | 🚧 Config + tokenizer only | [`Google/Gemma 4/Gemma 4 (E2B)`](Google/Gemma%204/Gemma%204%20%28E2B%29) |
@@ -422,7 +422,7 @@ Being precise about what "implemented" means here:
 |---|---|
 | Does each `model.py` build from its `cfg` and run a forward pass? | **Intended, but not exhaustively tested.** Every implemented model ships a `main()` demo that generates tokens with random weights, but not every demo has been executed end to end — the largest configs need far more memory than typical hardware, and one demo has a missing-file problem (see [Known limitations](#known-limitations)). |
 | Can pretrained weights be loaded? | **Not yet.** There is no weight-loading or checkpoint-conversion code. |
-| Have outputs been compared with a reference implementation (e.g. `transformers`)? | **Not yet.** Numerical equivalence with the official models is unverified. |
+| Have outputs been compared with a reference implementation (e.g. `transformers`)? | **Only partly.** The Gemma 3 4B / 12B / 27B implementations were checked against `transformers`' `Gemma3ForCausalLM` on small configs with matching structure (logits agree to about 1e-7). Full-size weights were not loaded, and every other model is still unverified. |
 | Is there an automated test suite or CI? | **Not yet.** |
 | Does inference use a KV cache or sampling? | **No.** Generation is greedy and recomputes the full sequence each step. This is intended for learning, not serving. |
 
@@ -432,6 +432,7 @@ Treat the implementations as faithful *attempts* at the published architectures,
 
 Issues already identified, listed so nobody is surprised:
 
+- **Gemma 3 (1B) cannot run a forward pass.** `Model.forward` uses `self.emb_scale`, which is never defined, so it raises `AttributeError`. The 4B / 12B / 27B files define it (the embeddings are scaled by `sqrt(hidden_size)`).
 - **Qwen3 is missing QK-norm.** The Qwen3 `model.py` files do not contain the per-head query/key RMSNorm that the Qwen3 architecture uses.
 - **Qwen1.5 and Qwen2.5 are configured with `bias_qkv: False`.** The reference models use a bias on the Q/K/V projections.
 - **OLMo 2 (7B) block layout needs confirming.** It is currently written with pre-norm; OLMo 2 is believed to normalise the attention and FFN *outputs* (as the OLMo 3 file does). Not yet checked against the reference code.
