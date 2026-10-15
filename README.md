@@ -8,6 +8,7 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.5%2B-ee4c2c)
 ![Models implemented](https://img.shields.io/badge/models%20implemented-52-brightgreen)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 </div>
 
@@ -464,8 +465,10 @@ When adding a model, follow the existing layout: a `<Vendor>/<Model Name (Size)>
 
 ## License
 
-No license has been added to this repository yet, so all rights are reserved by default. A license should be added before others reuse the code.
+This project's code is released under the [MIT License](LICENSE). The architecture diagrams are third-party material and are not covered by it; see [Acknowledgements](#acknowledgements).
 
 ## Acknowledgements
+
+**Architecture visuals** used in this repository are sourced from [Sebastian Raschka's Architecture Gallery](https://sebastianraschka.com/). Special thanks to Sebastian Raschka for creating and sharing these valuable visual resources. The diagrams remain the work of their creator and are not covered by this repository's MIT license; please refer to the source for their terms of use.
 
 Architectures are based on the original papers and on the publicly released model configurations and tokenizers from each model's authors. Model names and trademarks belong to their respective owners; this project is independent and unaffiliated.
