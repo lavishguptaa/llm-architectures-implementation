@@ -22,7 +22,7 @@ This repository is a growing library of decoder-only LLM architectures written i
 | `model.py` | Self-contained PyTorch implementation (attention, RoPE, norms, feed-forward / MoE, full model, greedy generation, and a runnable `main()` demo) |
 | `config.json` | The model's official configuration, as published by its authors |
 | `tokenizer.json` | The model's Hugging Face tokenizer file, loaded with the `tokenizers` library |
-| `*.webp` / `*.png` | Architecture diagram (only some folders) |
+| `*.webp` / `*.png` | Architecture diagram (only some folders; in `assets/` for the Ai2 models, next to `model.py` elsewhere) |
 
 The goal is to make the differences *between* architectures easy to see: the same building blocks (RoPE, RMSNorm, SwiGLU, GQA) recombined in different ways, plus the genuinely new ideas (sliding-window layer patterns, logit soft-capping, QK-norm, YaRN / `llama3` RoPE scaling, sparse Mixture-of-Experts routing).
 
@@ -78,7 +78,7 @@ Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antare
     ├── model.py                 # (implemented models only)
     ├── config.json
     ├── tokenizer.json
-    └── <diagram>.webp           # (some models)
+    └── <diagram>.webp           # (some models; under assets/ for Ai2)
 ```
 
 ## Quick start
