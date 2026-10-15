@@ -50,7 +50,7 @@ Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antare
   - Normalisation: RMSNorm, LayerNorm (Phi-1 / 1.5), pre-norm and post-norm block layouts (Gemma 2 uses four norms per block)
   - Feed-forward: gated SwiGLU-style MLPs, and a **sparse MoE block** (GLM-4.5 family) with sigmoid routing, bias-corrected group-limited top-k expert selection, shared experts, and dense leading layers
 - **Attention mechanisms from first principles.** A separate [`attention-mechanisms/`](attention-mechanisms) folder implements the building blocks on their own — useful as a learning path before reading the full models.
-- **Minimal dependencies:** `torch` and `tokenizers`.
+- **Minimal dependencies:** `torch` and `tokenizers` (see [`requirements.txt`](requirements.txt)).
 
 ## Repository structure
 
@@ -88,7 +88,7 @@ Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antare
 ```bash
 git clone https://github.com/lavishguptaa/llm-architectures-implementation.git
 cd llm-architectures-implementation
-pip install torch tokenizers
+pip install -r requirements.txt
 ```
 
 Python 3.10+ and a recent PyTorch (2.5+) are recommended: several models call `F.scaled_dot_product_attention(..., enable_gqa=True)`, which needs a recent release.
@@ -448,7 +448,7 @@ Planned work, roughly in priority order. Nothing below is implemented yet.
 - [ ] Unify code style on the `cfg`-dict / `compute_rope_params` structure; share one implementation per family
 - [ ] KV cache and sampling (temperature, top-k, top-p); chat templates
 - [ ] Parameter-count and memory-estimate script (instantiate on the `meta` device to sanity-check configs)
-- [ ] Automated smoke tests and CI; `requirements.txt` / `pyproject.toml`
+- [ ] Automated smoke tests and CI; `pyproject.toml` packaging
 - [ ] Reduce repository size (shared tokenizers, a single `docs/` folder for diagrams)
 - [ ] Architecture comparison tables (attention type, norm placement, positional encoding, dense vs. MoE)
 

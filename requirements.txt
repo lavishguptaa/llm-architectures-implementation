@@ -1,0 +1,7 @@
+# Core dependencies for running the model.py demos and attention-mechanisms/
+# torch>=2.5: several models call F.scaled_dot_product_attention(..., enable_gqa=True)
+torch>=2.5
+# loads each model's tokenizer.json
+tokenizers
+# currently imported (but not used) by the Qwen3 (0.6B) and Mistral Small 3.1 model.py files
+numpy
