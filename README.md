@@ -35,7 +35,7 @@ The goal is to make the differences *between* architectures easy to see: the sam
 | | Count |
 |---|---|
 | ✅ Models with a `model.py` implementation | **57** |
-| 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **28** |
+| 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **35** |
 | 📁 Reserved folders (no config or code yet) | **3** |
 | Standalone attention-mechanism implementations | **9** files |
 
@@ -63,6 +63,7 @@ Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antare
 ├── BOSS Zhipin/                 # Nanbeige
 ├── Cisco/                       # Antares
 ├── Cohere/                      # Tiny Aya
+├── Deepseek/                    # DeepSeek V2, V3, R1, V3.2, V4
 ├── GLM_Series/                  # GLM-4.5, 4.5-Air, 4.7, 5.x
 ├── Google/                      # Gemma 1, 2, 3, 4
 ├── Hugging Face/                # SmolLM3
@@ -208,6 +209,23 @@ _Llama-style GQA decoder._
 | Model | Status | Folder |
 |---|---|---|
 | Tiny Aya (3.35B) | 🚧 Config + tokenizer only | [`Cohere/Tiny Aya (3.35B)`](Cohere/Tiny%20Aya%20%283.35B%29) |
+
+</details>
+
+<details>
+<summary><b>DeepSeek</b> &nbsp;·&nbsp; 0 implemented / 7 total</summary>
+
+_No implementations yet: each folder has the official config, tokenizer and an architecture diagram._
+
+| Model | Status | Folder |
+|---|---|---|
+| DeepSeek R1 (671B) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek R1 (671B)`](Deepseek/DeepSeek%20R1%20%28671B%29) |
+| DeepSeek V3 (671B) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek V3 (671B)`](Deepseek/DeepSeek%20V3%20%28671B%29) |
+| DeepSeek V3.2 (671B) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek V3.2 (671B)`](Deepseek/DeepSeek%20V3.2%20%28671B%29) |
+| DeepSeek V4-Flash (284B) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek V4-Flash (284B)`](Deepseek/DeepSeek%20V4-Flash%20%28284B%29) |
+| DeepSeek V4-Pro (1.6T) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek V4-Pro (1.6T)`](Deepseek/DeepSeek%20V4-Pro%20%281.6T%29) |
+| DeepSeek V4.1-Flash (552B) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek V4.1-Flash (552B)`](Deepseek/DeepSeek%20V4.1-Flash%20%28552B%29) |
+| DeepSeek-V2 | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek-V2`](Deepseek/DeepSeek-V2) |
 
 </details>
 
@@ -446,7 +464,7 @@ Planned work, roughly in priority order. Nothing below is implemented yet.
 
 - [ ] **Correctness:** weight-loading scripts and logit-comparison tests against `transformers` on small checkpoints (e.g. Qwen2.5-0.5B, LLaMA 3.2 1B, Gemma 3 1B, OLMo 2/3 7B)
 - [ ] Resolve the [known limitations](#known-limitations) above
-- [ ] **Implement the 🚧 models**, prioritising new ideas over extra sizes: Gemma 3 / Gemma 4, LLaMA 4 (MoE), Nemotron 3, MiniMax M2+, MiMo, GLM-5.x, SmolLM3, Tiny Aya
+- [ ] **Implement the 🚧 models**, prioritising new ideas over extra sizes: DeepSeek V3 / R1 / V3.2 / V4, Gemma 4, LLaMA 4 (MoE), Nemotron 3, MiniMax M2+, MiMo, GLM-5.x, SmolLM3, Tiny Aya
 - [ ] Unify code style on the `cfg`-dict / `compute_rope_params` structure; share one implementation per family
 - [ ] KV cache and sampling (temperature, top-k, top-p); chat templates
 - [ ] Parameter-count and memory-estimate script (instantiate on the `meta` device to sanity-check configs)
