@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.5%2B-ee4c2c)
-![Models implemented](https://img.shields.io/badge/models%20implemented-56-brightgreen)
+![Models implemented](https://img.shields.io/badge/models%20implemented-57-brightgreen)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -34,12 +34,12 @@ The goal is to make the differences *between* architectures easy to see: the sam
 
 | | Count |
 |---|---|
-| ✅ Models with a `model.py` implementation | **56** |
-| 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **29** |
+| ✅ Models with a `model.py` implementation | **57** |
+| 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **28** |
 | 📁 Reserved folders (no config or code yet) | **3** |
 | Standalone attention-mechanism implementations | **9** files |
 
-Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antares, GLM-4.5 / 4.5-Air / 4.7 (MoE), Gemma 1 / 2 / 3 (1B, 4B, 12B, 27B), Granite 4.1, LLaMA 1 / 2 / 3 / 3.1 / 3.2, Phi-1 / 1.5 / 4, Mistral Small 3.1 / 4 (MLA + MoE).**
+Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antares, GLM-4.5 / 4.5-Air / 4.7 (MoE), Gemma 1 / 2 / 3 (1B, 4B, 12B, 27B), Granite 4.1, LLaMA 1 / 2 / 3 / 3.1 / 3.2, Phi-1 / 1.5 / 4, Mistral Small 3.1 / 4 and Mistral Large 3 (MLA + MoE).**
 
 ## Highlights
 
@@ -336,15 +336,15 @@ _Phi-1 / Phi-1.5 (LayerNorm, GELU, MHA); Phi-4 (RMSNorm, GQA)._
 </details>
 
 <details>
-<summary><b>Mistral AI</b> &nbsp;·&nbsp; 2 implemented / 3 total</summary>
+<summary><b>Mistral AI</b> &nbsp;·&nbsp; 3 implemented / 3 total</summary>
 
 
-_Mistral Small 3.1: text decoder only (no vision tower). Mistral Small 4: multi-head latent attention with YaRN-scaled RoPE and a shared-expert MoE (128 routed experts, top-4); text model only._
+_Mistral Small 3.1: text decoder only (no vision tower). Mistral Small 4: multi-head latent attention with YaRN-scaled RoPE and a shared-expert MoE (128 routed experts, top-4); text model only. Mistral Large 3: the same MLA + MoE design at 673B with 3 dense leading layers (configured from its native `params.json`); text model only._
 
 
 | Model | Status | Folder |
 |---|---|---|
-| Mistral Large 3 (673B) | 🚧 Config + tokenizer only | [`Mistral AI/Mistral Large 3 (673B)`](Mistral%20AI/Mistral%20Large%203%20%28673B%29) |
+| Mistral Large 3 (673B) | ✅ Implemented | [`Mistral AI/Mistral Large 3 (673B)`](Mistral%20AI/Mistral%20Large%203%20%28673B%29) |
 | Mistral Small 3.1 (24B) | ✅ Implemented | [`Mistral AI/Mistral Small 3.1 (24B)`](Mistral%20AI/Mistral%20Small%203.1%20%2824B%29) |
 | Mistral Small 4 (119B) | ✅ Implemented | [`Mistral AI/Mistral Small 4 (119B)`](Mistral%20AI/Mistral%20Small%204%20%28119B%29) |
 
@@ -422,7 +422,7 @@ Being precise about what "implemented" means here:
 |---|---|
 | Does each `model.py` build from its `cfg` and run a forward pass? | **Intended, but not exhaustively tested.** Every implemented model ships a `main()` demo that generates tokens with random weights, but not every demo has been executed end to end — the largest configs need far more memory than typical hardware, and one demo has a missing-file problem (see [Known limitations](#known-limitations)). |
 | Can pretrained weights be loaded? | **Not yet.** There is no weight-loading or checkpoint-conversion code. |
-| Have outputs been compared with a reference implementation (e.g. `transformers`)? | **Only partly.** The Gemma 3 4B / 12B / 27B and Mistral Small 4 implementations were checked against `transformers`' `Gemma3ForCausalLM` / `Mistral4ForCausalLM` on small configs with matching structure (logits agree to about 1e-7; the Mistral Small 4 parameter count at full size also matches exactly). Full-size weights were not loaded, and every other model is still unverified. |
+| Have outputs been compared with a reference implementation (e.g. `transformers`)? | **Only partly.** The Gemma 3 4B / 12B / 27B, Mistral Small 4 and Mistral Large 3 implementations were checked against `transformers`' `Gemma3ForCausalLM` / `Mistral4ForCausalLM` on small configs with matching structure (logits agree to about 1e-7; the Mistral Small 4 parameter count at full size also matches exactly). Full-size weights were not loaded, and every other model is still unverified. |
 | Is there an automated test suite or CI? | **Not yet.** |
 | Does inference use a KV cache or sampling? | **No.** Generation is greedy and recomputes the full sequence each step. This is intended for learning, not serving. |
 
@@ -446,7 +446,7 @@ Planned work, roughly in priority order. Nothing below is implemented yet.
 
 - [ ] **Correctness:** weight-loading scripts and logit-comparison tests against `transformers` on small checkpoints (e.g. Qwen2.5-0.5B, LLaMA 3.2 1B, Gemma 3 1B, OLMo 2/3 7B)
 - [ ] Resolve the [known limitations](#known-limitations) above
-- [ ] **Implement the 🚧 models**, prioritising new ideas over extra sizes: Gemma 3 / Gemma 4, LLaMA 4 (MoE), Mistral Large 3, Nemotron 3, MiniMax M2+, MiMo, GLM-5.x, SmolLM3, Tiny Aya
+- [ ] **Implement the 🚧 models**, prioritising new ideas over extra sizes: Gemma 3 / Gemma 4, LLaMA 4 (MoE), Nemotron 3, MiniMax M2+, MiMo, GLM-5.x, SmolLM3, Tiny Aya
 - [ ] Unify code style on the `cfg`-dict / `compute_rope_params` structure; share one implementation per family
 - [ ] KV cache and sampling (temperature, top-k, top-p); chat templates
 - [ ] Parameter-count and memory-estimate script (instantiate on the `meta` device to sanity-check configs)
