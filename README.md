@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.5%2B-ee4c2c)
-![Models implemented](https://img.shields.io/badge/models%20implemented-57-brightgreen)
+![Models implemented](https://img.shields.io/badge/models%20implemented-72-brightgreen)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -28,28 +28,28 @@ This repository is a growing library of decoder-only LLM architectures written i
 The goal is to make the differences *between* architectures easy to see: the same building blocks (RoPE, RMSNorm, SwiGLU, GQA) recombined in different ways, plus the genuinely new ideas (sliding-window layer patterns, logit soft-capping, QK-norm, YaRN / `llama3` RoPE scaling, sparse Mixture-of-Experts routing).
 
 > [!IMPORTANT]
-> **Project status: work in progress.** The architectures are implemented, but **they have not yet been validated against reference weights or reference outputs**. See [Verification status](#verification-status) for exactly what that means, and [Known limitations](#known-limitations) for issues already identified.
+> **Project status: work in progress.** Many of the architectures have been checked against a reference implementation (see [Verification status](#verification-status)), but **none has been validated with real pretrained weights**, and a number of the older implementations are still unverified. See [Known limitations](#known-limitations) for issues already identified.
 
 ## At a glance
 
 | | Count |
 |---|---|
-| ✅ Models with a `model.py` implementation | **57** |
-| 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **35** |
+| ✅ Models with a `model.py` implementation | **72** |
+| 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **34** |
 | 📁 Reserved folders (no config or code yet) | **3** |
 | Standalone attention-mechanism implementations | **9** files |
 
-Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antares, GLM-4.5 / 4.5-Air / 4.7 (MoE), Gemma 1 / 2 / 3 (1B, 4B, 12B, 27B), Granite 4.1, LLaMA 1 / 2 / 3 / 3.1 / 3.2, Phi-1 / 1.5 / 4, Mistral Small 3.1 / 4 and Mistral Large 3 (MLA + MoE).**
+Implemented families: **OLMo 2 / 3, Qwen 1.5 / 2.5 / 3 (dense and MoE), DeepSeek V2 / V3, Nanbeige 4.1, Cisco Antares, GLM-4.5 / 4.5-Air / 4.7, INTELLECT-3, Step 3.5 Flash, Sarvam 30B, Laguna XS.2 / XS 2.1, GPT-OSS 20B / 120B, Gemma 1 / 2 / 3, Granite 4.1, LLaMA 1 / 2 / 3 / 3.1 / 3.2 / 4 Maverick, Phi-1 / 1.5 / 4, Mistral Small 3.1 / 4 and Mistral Large 3.**
 
 ## Highlights
 
 - **One file per model.** Open a folder, read `model.py` top to bottom, and you have the whole architecture — no framework indirection, no inheritance maze.
 - **Configuration-driven.** Each model is built from a plain `cfg` dictionary that mirrors the official `config.json` keys, so adapting a model to a new size is a config change.
 - **Architectural features covered**
-  - Positional encoding: RoPE, `llama3`-style frequency scaling (LLaMA 3.1 / 3.2), YaRN (OLMo 3), partial rotary embeddings (GLM), per-layer-type RoPE bases and linear scaling on global layers (Gemma 3)
-  - Attention: MHA, GQA, sliding-window / full-attention layer patterns (Gemma 2/3, OLMo 3), attention-logit and final-logit soft-capping (Gemma 2), QK-norm (OLMo 2/3, Gemma 3, optional in GLM)
-  - Normalisation: RMSNorm, LayerNorm (Phi-1 / 1.5), pre-norm and post-norm block layouts (Gemma 2 uses four norms per block)
-  - Feed-forward: gated SwiGLU-style MLPs, and a **sparse MoE block** (GLM-4.5 family) with sigmoid routing, bias-corrected group-limited top-k expert selection, shared experts, and dense leading layers
+  - Positional encoding: RoPE (half-split and interleaved pairing), `llama3` frequency scaling (LLaMA 3.1 / 3.2, Step 3.5 Flash), YaRN (OLMo 3, DeepSeek, Mistral Small 4 / Large 3, GPT-OSS, Laguna), partial rotary embeddings (GLM, Step, Laguna), per-layer-type RoPE settings (Gemma 3, Step, Laguna), layers with no positional encoding at all (LLaMA 4)
+  - Attention: MHA, GQA, **multi-head latent attention** (DeepSeek, Mistral Small 4 / Large 3), sliding-window and chunked-attention layer patterns (Gemma 2/3, OLMo 3, GPT-OSS, Step, Laguna, LLaMA 4), per-head attention sinks (GPT-OSS), per-head output gates (Step, Laguna), per-layer head counts, QK-norm, attention-logit and final-logit soft-capping (Gemma 2), position-dependent query scaling (LLaMA 4, Mistral Small 4 / Large 3)
+  - Normalisation and scaling: RMSNorm (including zero-centred and weight-free variants), LayerNorm (Phi-1 / 1.5), pre-norm and post-norm block layouts, Granite's embedding / residual / logit multipliers
+  - Feed-forward: gated SwiGLU-style MLPs (including clamped and biased variants), and many **sparse MoE** designs: sigmoid routing with a selection bias and group-limited top-k (GLM, DeepSeek V3, Step, Sarvam, Laguna), softmax routing (Qwen3, DeepSeek V2, Mistral), top-k-then-softmax (GPT-OSS), top-1 sigmoid gating that scales the expert input (LLaMA 4), shared experts and dense leading layers
 - **Attention mechanisms from first principles.** A separate [`attention-mechanisms/`](attention-mechanisms) folder implements the building blocks on their own — useful as a learning path before reading the full models.
 - **Minimal dependencies:** `torch` and `tokenizers` (see [`requirements.txt`](requirements.txt)).
 
@@ -59,7 +59,7 @@ Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antare
 .
 ├── attention-mechanisms/        # Standalone attention implementations (see below)
 ├── Ai2/                         # OLMo 2, OLMo 3
-├── Alibaba/                     # Qwen1.5, Qwen2.5, Qwen3
+├── Alibaba/                     # Qwen1.5, Qwen2.5, Qwen3 (dense and MoE)
 ├── BOSS Zhipin/                 # Nanbeige
 ├── Cisco/                       # Antares
 ├── Cohere/                      # Tiny Aya
@@ -73,6 +73,11 @@ Implemented families: **OLMo 2/3, Qwen 1.5 / 2.5 / 3, Nanbeige 4.1, Cisco Antare
 ├── MiniMax/                     # MiniMax M2 – M3
 ├── Mistral AI/                  # Mistral Small / Large
 ├── Nvidia/                      # Nemotron 3
+├── OpenAI/                      # GPT-OSS
+├── Poolside/                    # Laguna
+├── Prime Intellect/             # INTELLECT-3
+├── Sarvam AI/                   # Sarvam
+├── StepFun/                     # Step 3.5 Flash
 ├── Weibo/                       # VibeThinker
 ├── Xiaomi/                      # MiMo
 ├── xAI/                         # Grok 2.5 (placeholder)
@@ -132,7 +137,7 @@ Expand a vendor to see its models. Each row links to its folder.
 <summary><b>Ai2</b> &nbsp;·&nbsp; 3 implemented / 3 total</summary>
 
 
-_OLMo 2: QK-norm. OLMo 3: sliding/full attention layer pattern, YaRN RoPE scaling, QK-norm, GQA (32B)._
+_OLMo 2: QK-norm. OLMo 3: sliding/full attention layer pattern, YaRN RoPE scaling, QK-norm, GQA (32B). OLMo 2 (7B) also has a `model_with_kv_cache.py` that generates with a KV cache._
 
 
 | Model | Status | Folder |
@@ -144,10 +149,10 @@ _OLMo 2: QK-norm. OLMo 3: sliding/full attention layer pattern, YaRN RoPE scalin
 </details>
 
 <details>
-<summary><b>Alibaba</b> &nbsp;·&nbsp; 19 implemented / 20 total</summary>
+<summary><b>Alibaba</b> &nbsp;·&nbsp; 22 implemented / 23 total</summary>
 
 
-_Qwen1.5 / Qwen2.5 / Qwen3 decoder-only dense models (RoPE, RMSNorm, SwiGLU, GQA where applicable)._
+_Qwen1.5 / Qwen2.5 / Qwen3 dense models (RoPE, RMSNorm, SwiGLU, GQA where applicable) and the Qwen3 mixture-of-experts models (per-head QK-norm, softmax routing over 128 experts, top 8): Qwen3 30B-A3B, 235B-A22B and Coder Flash._
 
 
 | Model | Status | Folder |
@@ -169,9 +174,12 @@ _Qwen1.5 / Qwen2.5 / Qwen3 decoder-only dense models (RoPE, RMSNorm, SwiGLU, GQA
 | Qwen2.5-72B | ✅ Implemented | [`Alibaba/qwen2.5/Qwen2.5-72B`](Alibaba/qwen2.5/Qwen2.5-72B) |
 | Qwen2.5-7B | ✅ Implemented | [`Alibaba/qwen2.5/Qwen2.5-7B`](Alibaba/qwen2.5/Qwen2.5-7B) |
 | Qwen3 (0.6B) | ✅ Implemented | [`Alibaba/qwen3/Qwen3 (0.6B)`](Alibaba/qwen3/Qwen3%20%280.6B%29) |
+| Qwen3 (235B-A22B) | ✅ Implemented | [`Alibaba/qwen3/Qwen3 (235B-A22B)`](Alibaba/qwen3/Qwen3%20%28235B-A22B%29) |
+| Qwen3 (30B-A3B) | ✅ Implemented | [`Alibaba/qwen3/Qwen3 (30B-A3B)`](Alibaba/qwen3/Qwen3%20%2830B-A3B%29) |
 | Qwen3 (32B) | ✅ Implemented | [`Alibaba/qwen3/Qwen3 (32B)`](Alibaba/qwen3/Qwen3%20%2832B%29) |
 | Qwen3 (4B) | ✅ Implemented | [`Alibaba/qwen3/Qwen3 (4B)`](Alibaba/qwen3/Qwen3%20%284B%29) |
 | Qwen3 (8B) | ✅ Implemented | [`Alibaba/qwen3/Qwen3 (8B)`](Alibaba/qwen3/Qwen3%20%288B%29) |
+| Qwen3 Coder Flash (30B-A3B) | ✅ Implemented | [`Alibaba/qwen3/Qwen3 Coder Flash (30B-A3B)`](Alibaba/qwen3/Qwen3%20Coder%20Flash%20%2830B-A3B%29) |
 
 </details>
 
@@ -213,19 +221,21 @@ _Llama-style GQA decoder._
 </details>
 
 <details>
-<summary><b>DeepSeek</b> &nbsp;·&nbsp; 0 implemented / 7 total</summary>
+<summary><b>DeepSeek</b> &nbsp;·&nbsp; 2 implemented / 7 total</summary>
 
-_No implementations yet: each folder has the official config, tokenizer and an architecture diagram._
+
+_DeepSeek-V2 and V3: multi-head latent attention, YaRN RoPE with the `mscale²` softmax scale, and shared-expert MoE after leading dense layers. V3 routes with sigmoid scores plus a selection bias over expert groups; V2 uses softmax group-limited top-k. The multi-token-prediction module is not implemented. R1, V3.2 and V4 are config only._
+
 
 | Model | Status | Folder |
 |---|---|---|
 | DeepSeek R1 (671B) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek R1 (671B)`](Deepseek/DeepSeek%20R1%20%28671B%29) |
-| DeepSeek V3 (671B) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek V3 (671B)`](Deepseek/DeepSeek%20V3%20%28671B%29) |
+| DeepSeek V3 (671B) | ✅ Implemented | [`Deepseek/DeepSeek V3 (671B)`](Deepseek/DeepSeek%20V3%20%28671B%29) |
 | DeepSeek V3.2 (671B) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek V3.2 (671B)`](Deepseek/DeepSeek%20V3.2%20%28671B%29) |
 | DeepSeek V4-Flash (284B) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek V4-Flash (284B)`](Deepseek/DeepSeek%20V4-Flash%20%28284B%29) |
 | DeepSeek V4-Pro (1.6T) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek V4-Pro (1.6T)`](Deepseek/DeepSeek%20V4-Pro%20%281.6T%29) |
 | DeepSeek V4.1-Flash (552B) | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek V4.1-Flash (552B)`](Deepseek/DeepSeek%20V4.1-Flash%20%28552B%29) |
-| DeepSeek-V2 | 🚧 Config + tokenizer only | [`Deepseek/DeepSeek-V2`](Deepseek/DeepSeek-V2) |
+| DeepSeek-V2 | ✅ Implemented | [`Deepseek/DeepSeek-V2`](Deepseek/DeepSeek-V2) |
 
 </details>
 
@@ -285,23 +295,25 @@ _Gemma 1; Gemma 2 (logit soft-capping, sliding/global layers, four norms per blo
 </details>
 
 <details>
-<summary><b>IBM</b> &nbsp;·&nbsp; 1 implemented / 1 total</summary>
+<summary><b>IBM</b> &nbsp;·&nbsp; 3 implemented / 3 total</summary>
 
 
-_Llama-style GQA decoder._
+_Granite 4.1 (3B, 8B, 30B): Llama-style GQA decoder with Granite's muP-style multipliers (embeddings ×12, attention scale 1/head_dim, scaled residual branches, scaled logits) and tied embeddings._
 
 
 | Model | Status | Folder |
 |---|---|---|
 | Granite 4.1 (30B) | ✅ Implemented | [`IBM/Granite 4.1 (30B)`](IBM/Granite%204.1%20%2830B%29) |
+| Granite 4.1 (3B) | ✅ Implemented | [`IBM/Granite 4.1 (3B)`](IBM/Granite%204.1%20%283B%29) |
+| Granite 4.1 (8B) | ✅ Implemented | [`IBM/Granite 4.1 (8B)`](IBM/Granite%204.1%20%288B%29) |
 
 </details>
 
 <details>
-<summary><b>Meta</b> &nbsp;·&nbsp; 14 implemented / 16 total</summary>
+<summary><b>Meta</b> &nbsp;·&nbsp; 15 implemented / 16 total</summary>
 
 
-_LLaMA 1 (MHA) through 3.2 (GQA, `llama3` RoPE scaling in 3.1/3.2)._
+_LLaMA 1 (MHA) through 3.2 (GQA, `llama3` RoPE scaling in 3.1/3.2), and LLaMA 4 Maverick (text model: MoE with a shared expert, chunked attention, layers without positional encoding)._
 
 
 | Model | Status | Folder |
@@ -320,7 +332,7 @@ _LLaMA 1 (MHA) through 3.2 (GQA, `llama3` RoPE scaling in 3.1/3.2)._
 | LLaMA 3.1 (8B) | ✅ Implemented | [`Meta/LLaMA 3/LLaMA 3.1/LLaMA 3.1 (8B)`](Meta/LLaMA%203/LLaMA%203.1/LLaMA%203.1%20%288B%29) |
 | LLaMA 3.2 (1B) | ✅ Implemented | [`Meta/LLaMA 3/LLaMA 3.2/LLaMA 3.2 (1B)`](Meta/LLaMA%203/LLaMA%203.2/LLaMA%203.2%20%281B%29) |
 | LLaMA 3.2 (3B) | ✅ Implemented | [`Meta/LLaMA 3/LLaMA 3.2/LLaMA 3.2 (3B)`](Meta/LLaMA%203/LLaMA%203.2/LLaMA%203.2%20%283B%29) |
-| LLaMA 4 Maverick (400B) | 🚧 Config + tokenizer only | [`Meta/LLaMA 4/LLaMA 4 Maverick (400B)`](Meta/LLaMA%204/LLaMA%204%20Maverick%20%28400B%29) |
+| LLaMA 4 Maverick (400B) | ✅ Implemented | [`Meta/LLaMA 4/LLaMA 4 Maverick (400B)`](Meta/LLaMA%204/LLaMA%204%20Maverick%20%28400B%29) |
 | Muse Glimmer (30B) | 🚧 Config + tokenizer only | [`Meta/Muse Glimmer (30B)`](Meta/Muse%20Glimmer%20%2830B%29) |
 
 </details>
@@ -357,7 +369,7 @@ _Phi-1 / Phi-1.5 (LayerNorm, GELU, MHA); Phi-4 (RMSNorm, GQA)._
 <summary><b>Mistral AI</b> &nbsp;·&nbsp; 3 implemented / 3 total</summary>
 
 
-_Mistral Small 3.1: text decoder only (no vision tower). Mistral Small 4: multi-head latent attention with YaRN-scaled RoPE and a shared-expert MoE (128 routed experts, top-4); text model only. Mistral Large 3: the same MLA + MoE design at 673B with 3 dense leading layers (configured from its native `params.json`); text model only._
+_Mistral Small 3.1: text decoder only (no vision tower). Mistral Small 4 and Mistral Large 3: multi-head latent attention with YaRN-scaled RoPE and a shared-expert MoE (128 routed experts, top 4; Large 3 adds 3 dense leading layers); text models only._
 
 
 | Model | Status | Folder |
@@ -379,6 +391,75 @@ _Mistral Small 3.1: text decoder only (no vision tower). Mistral Small 4: multi-
 | Nemotron 3 Super (120B-A12B) | 🚧 Config + tokenizer only | [`Nvidia/Nemotron 3 Super (120B-A12B)`](Nvidia/Nemotron%203%20Super%20%28120B-A12B%29) |
 | Nemotron 3 Ultra (550B-A55B) | 🚧 Config + tokenizer only | [`Nvidia/Nemotron 3 Ultra (550B-A55B)`](Nvidia/Nemotron%203%20Ultra%20%28550B-A55B%29) |
 | Nemotron 3.5 Lightning (30B-A3B) | 🚧 Config + tokenizer only | [`Nvidia/Nemotron 3.5 Lightning (30B-A3B)`](Nvidia/Nemotron%203.5%20Lightning%20%2830B-A3B%29) |
+
+</details>
+
+<details>
+<summary><b>OpenAI</b> &nbsp;·&nbsp; 2 implemented / 2 total</summary>
+
+
+_GPT-OSS 20B / 120B: per-head attention sinks, alternating sliding-window and full attention, biased and clamped SwiGLU experts, top-4 routing, YaRN._
+
+
+| Model | Status | Folder |
+|---|---|---|
+| GPT-OSS (120B) | ✅ Implemented | [`OpenAI/GPT-OSS (120B)`](OpenAI/GPT-OSS%20%28120B%29) |
+| GPT-OSS (20B) | ✅ Implemented | [`OpenAI/GPT-OSS (20B)`](OpenAI/GPT-OSS%20%2820B%29) |
+
+</details>
+
+<details>
+<summary><b>Poolside</b> &nbsp;·&nbsp; 2 implemented / 3 total</summary>
+
+
+_Laguna XS.2 and XS 2.1 (one shared architecture): per-layer head counts, softplus per-head output gate, sigmoid-routed MoE with a selection bias and a shared expert, YaRN on the full-attention layers only._
+
+
+| Model | Status | Folder |
+|---|---|---|
+| Laguna S 2.1 (118B) | 🚧 Config + tokenizer only | [`Poolside/Laguna S 2.1 (118B)`](Poolside/Laguna%20S%202.1%20%28118B%29) |
+| Laguna XS 2.1 (33B) | ✅ Implemented | [`Poolside/Laguna XS 2.1 (33B)`](Poolside/Laguna%20XS%202.1%20%2833B%29) |
+| Laguna XS.2 (33B) | ✅ Implemented | [`Poolside/Laguna XS.2 (33B)`](Poolside/Laguna%20XS.2%20%2833B%29) |
+
+</details>
+
+<details>
+<summary><b>Prime Intellect</b> &nbsp;·&nbsp; 1 implemented / 1 total</summary>
+
+
+_INTELLECT-3 uses the GLM-4.5-Air architecture._
+
+
+| Model | Status | Folder |
+|---|---|---|
+| INTELLECT-3 (106B) | ✅ Implemented | [`Prime Intellect/INTELLECT-3 (106B)`](Prime%20Intellect/INTELLECT-3%20%28106B%29) |
+
+</details>
+
+<details>
+<summary><b>Sarvam AI</b> &nbsp;·&nbsp; 1 implemented / 2 total</summary>
+
+
+_Sarvam 30B: fused QKV projection with QK-norm, a dense first layer, then sigmoid-routed MoE with a shared expert._
+
+
+| Model | Status | Folder |
+|---|---|---|
+| Sarvam (105B) | 🚧 Config + tokenizer only | [`Sarvam AI/Sarvam (105B)`](Sarvam%20AI/Sarvam%20%28105B%29) |
+| Sarvam (30B) | ✅ Implemented | [`Sarvam AI/Sarvam (30B)`](Sarvam%20AI/Sarvam%20%2830B%29) |
+
+</details>
+
+<details>
+<summary><b>StepFun</b> &nbsp;·&nbsp; 1 implemented / 1 total</summary>
+
+
+_Step 3.5 Flash: 64-head full-attention and 96-head sliding-window layers, sigmoid per-head output gate, zero-centred RMSNorm, per-layer RoPE settings, clamped SwiGLU, sigmoid MoE with a selection bias. The multi-token-prediction layers are not implemented._
+
+
+| Model | Status | Folder |
+|---|---|---|
+| Step 3.5 Flash (196B) | ✅ Implemented | [`StepFun/Step 3.5 Flash (196B)`](StepFun/Step%203.5%20Flash%20%28196B%29) |
 
 </details>
 
@@ -438,35 +519,41 @@ Being precise about what "implemented" means here:
 
 | Question | Answer today |
 |---|---|
-| Does each `model.py` build from its `cfg` and run a forward pass? | **Intended, but not exhaustively tested.** Every implemented model ships a `main()` demo that generates tokens with random weights, but not every demo has been executed end to end — the largest configs need far more memory than typical hardware, and one demo has a missing-file problem (see [Known limitations](#known-limitations)). |
+| Does each `model.py` build from its `cfg` and run a forward pass? | **Intended, but not exhaustively tested.** Every implemented model ships a `main()` demo that generates tokens with random weights, but the demos for the largest models cannot run on typical hardware (they allocate every parameter in fp32), and some demos have not been executed end to end. See [Known limitations](#known-limitations). |
 | Can pretrained weights be loaded? | **Not yet.** There is no weight-loading or checkpoint-conversion code. |
-| Have outputs been compared with a reference implementation (e.g. `transformers`)? | **Only partly.** The Gemma 3 4B / 12B / 27B, Mistral Small 4 and Mistral Large 3 implementations were checked against `transformers`' `Gemma3ForCausalLM` / `Mistral4ForCausalLM` on small configs with matching structure (logits agree to about 1e-7; the Mistral Small 4 parameter count at full size also matches exactly). Full-size weights were not loaded, and every other model is still unverified. |
-| Is there an automated test suite or CI? | **Not yet.** |
-| Does inference use a KV cache or sampling? | **No.** Generation is greedy and recomputes the full sequence each step. This is intended for learning, not serving. |
+| Have outputs been compared with a reference implementation? | **For the models listed below, yes; for the rest, no.** The comparisons copy identical random weights into a small model of the same structure and into the reference, and compare logits (they agree to roughly 1e-5 or better in float32). Each also checks that the full-size configuration has exactly the same parameter count as the reference. The comparisons were also confirmed to be sensitive by deliberately breaking individual features and checking that the test fails; that was done for every model above except DeepSeek V2 / V3, INTELLECT-3 and Mistral Large 3 (Granite was checked by switching off each multiplier in turn). |
+| Are those comparison scripts in this repository? | **No.** They were run outside the repo and are not committed. There is no automated test suite or CI yet. |
+| Does inference use a KV cache or sampling? | **Mostly no.** Generation is greedy and recomputes the full sequence each step. The one exception is `OLMo 2 (7B)/model_with_kv_cache.py`. |
 
-Treat the implementations as faithful *attempts* at the published architectures, written from the papers, configs and public model code, until logit-level verification is added.
+**Checked against `transformers`:** Gemma 3 4B / 12B / 27B, Mistral Small 4, Mistral Large 3 (against `transformers`' Mistral 4 and DeepSeek-V2 code, since Large 3 has no `transformers` implementation), Qwen3 Coder Flash / 30B-A3B / 235B-A22B, INTELLECT-3 (which shares its code with GLM-4.5-Air), DeepSeek V2 and V3, GPT-OSS 20B / 120B, Granite 4.1 3B / 8B / 30B, and LLaMA 4 Maverick.
+
+**Checked against the model authors' official Hugging Face code:** Step 3.5 Flash, Sarvam 30B, Laguna XS.2 and XS 2.1.
+
+**Not checked against any reference:** everything else, including OLMo 2 / 3, the other Qwen models, LLaMA 1 / 2 / 3 / 3.1 / 3.2, Gemma 1 / 2 / 3 (1B), Phi, Nanbeige, Antares, Mistral Small 3.1 and the GLM-4.5 / 4.5-Air / 4.7 folders themselves. Treat those as faithful *attempts* at the published architectures until logit-level verification is added.
 
 ## Known limitations
 
 Issues already identified, listed so nobody is surprised:
 
 - **Gemma 3 (1B) cannot run a forward pass.** `Model.forward` uses `self.emb_scale`, which is never defined, so it raises `AttributeError`. The 4B / 12B / 27B files define it (the embeddings are scaled by `sqrt(hidden_size)`).
-- **Qwen3 is missing QK-norm.** The Qwen3 `model.py` files do not contain the per-head query/key RMSNorm that the Qwen3 architecture uses.
+- **Qwen3 (4B), (8B) and (32B) are missing QK-norm.** They do not contain the per-head query/key RMSNorm that the Qwen3 architecture uses. Qwen3 (0.6B) and the three Qwen3 MoE models do.
 - **Qwen1.5 and Qwen2.5 are configured with `bias_qkv: False`.** The reference models use a bias on the Q/K/V projections.
 - **OLMo 2 (7B) block layout needs confirming.** It is currently written with pre-norm; OLMo 2 is believed to normalise the attention and FFN *outputs* (as the OLMo 3 file does). Not yet checked against the reference code.
 - **OLMo 3 applies YaRN to every layer.** Whether the sliding-window layers should use plain RoPE instead is still to be verified.
 - **Mistral Small 3.1's demo cannot run as shipped:** `main()` opens `tokenizer_config.json`, which is not in that folder. The model covers the text decoder only (no vision tower).
-- **Code style is not yet uniform across families.** Older folders (e.g. LLaMA 1/2/3, Qwen, Gemma 1, Phi) use a positional-argument attention constructor, an in-file `Rope` module and a `CustomDataset` helper; newer ones (OLMo, GLM, Gemma 2/3, LLaMA 3.1/3.2) use `cfg`-dict constructors and `compute_rope_params` / `apply_rope`. Models within a family are near-duplicates that differ only in their config values.
+- **Multi-token-prediction modules are not implemented** (DeepSeek V3, Step 3.5 Flash). They are only used for speculative decoding and training. **Vision encoders are not implemented** for any model.
+- **Demos for large models need far more memory than typical hardware**: a model with hundreds of billions of parameters needs hundreds of GB to several TB in fp32. The parameter counts of these configs were checked on PyTorch's `meta` device instead.
+- **Code style is not yet uniform across families.** Older folders (e.g. LLaMA 1/2/3, Qwen dense, Gemma 1, Phi) use a positional-argument attention constructor, an in-file `Rope` module and a `CustomDataset` helper; newer ones use `cfg`-dict constructors, `compute_rope_params` / `apply_rope`, one shared RoPE table per model, and read their `config.json` directly. Models within a family are near-duplicates that differ only in their config values.
 
 ## Roadmap
 
 Planned work, roughly in priority order. Nothing below is implemented yet.
 
-- [ ] **Correctness:** weight-loading scripts and logit-comparison tests against `transformers` on small checkpoints (e.g. Qwen2.5-0.5B, LLaMA 3.2 1B, Gemma 3 1B, OLMo 2/3 7B)
-- [ ] Resolve the [known limitations](#known-limitations) above
-- [ ] **Implement the 🚧 models**, prioritising new ideas over extra sizes: DeepSeek V3 / R1 / V3.2 / V4, Gemma 4, LLaMA 4 (MoE), Nemotron 3, MiniMax M2+, MiMo, GLM-5.x, SmolLM3, Tiny Aya
-- [ ] Unify code style on the `cfg`-dict / `compute_rope_params` structure; share one implementation per family
-- [ ] KV cache and sampling (temperature, top-k, top-p); chat templates
+- [ ] **Correctness:** add the logit-comparison scripts to the repository, plus weight-loading scripts and comparisons on real small checkpoints (e.g. Qwen2.5-0.5B, LLaMA 3.2 1B, Gemma 3 1B, OLMo 2/3 7B)
+- [ ] Verify or fix the older implementations listed under [known limitations](#known-limitations) (the Qwen dense models, OLMo, LLaMA 1 / 2 / 3, Gemma 1 / 2 / 3 1B, Phi)
+- [ ] **Implement the remaining 🚧 models**, prioritising new ideas over extra sizes: DeepSeek R1 / V3.2 / V4, Gemma 4, Nemotron 3, MiniMax M2+, MiMo, GLM-5.x, Laguna S 2.1, Sarvam 105B, SmolLM3, Tiny Aya
+- [ ] Unify code style on the newer `cfg`-dict / `compute_rope_params` structure; share one implementation per family
+- [ ] KV cache and sampling (temperature, top-k, top-p) for the other models; chat templates
 - [ ] Parameter-count and memory-estimate script (instantiate on the `meta` device to sanity-check configs)
 - [ ] Automated smoke tests and CI; `pyproject.toml` packaging
 - [ ] Reduce repository size (shared tokenizers, a single `docs/` folder for diagrams)
