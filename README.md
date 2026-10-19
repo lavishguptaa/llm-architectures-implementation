@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.5%2B-ee4c2c)
-![Models implemented](https://img.shields.io/badge/models%20implemented-72-brightgreen)
+![Models implemented](https://img.shields.io/badge/models%20implemented-75-brightgreen)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -34,20 +34,20 @@ The goal is to make the differences *between* architectures easy to see: the sam
 
 | | Count |
 |---|---|
-| ✅ Models with a `model.py` implementation | **72** |
-| 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **34** |
-| 📁 Reserved folders (no config or code yet) | **3** |
+| ✅ Models with a `model.py` implementation | **75** |
+| 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **35** |
+| 📁 Reserved folders (no config or code yet) | **1** |
 | Standalone attention-mechanism implementations | **9** files |
 
-Implemented families: **OLMo 2 / 3, Qwen 1.5 / 2.5 / 3 (dense and MoE), DeepSeek V2 / V3, Nanbeige 4.1, Cisco Antares, GLM-4.5 / 4.5-Air / 4.7, INTELLECT-3, Step 3.5 Flash, Sarvam 30B, Laguna XS.2 / XS 2.1, GPT-OSS 20B / 120B, Gemma 1 / 2 / 3, Granite 4.1, LLaMA 1 / 2 / 3 / 3.1 / 3.2 / 4 Maverick, Phi-1 / 1.5 / 4, Mistral Small 3.1 / 4 and Mistral Large 3.**
+Implemented families: **OLMo 2 / 3, Qwen 1.5 / 2.5 / 3 (dense and MoE), DeepSeek V2 / V3, Nanbeige 4.1, Cisco Antares, GLM-4.5 / 4.5-Air / 4.7 / 5 / 5.1 / 5.2, INTELLECT-3, Step 3.5 Flash, Sarvam 30B, Laguna XS.2 / XS 2.1, GPT-OSS 20B / 120B, Gemma 1 / 2 / 3, Granite 4.1, LLaMA 1 / 2 / 3 / 3.1 / 3.2 / 4 Maverick, Phi-1 / 1.5 / 4, Mistral Small 3.1 / 4 and Mistral Large 3.**
 
 ## Highlights
 
 - **One file per model.** Open a folder, read `model.py` top to bottom, and you have the whole architecture — no framework indirection, no inheritance maze.
 - **Configuration-driven.** Each model is built from a plain `cfg` dictionary that mirrors the official `config.json` keys, so adapting a model to a new size is a config change.
 - **Architectural features covered**
-  - Positional encoding: RoPE (half-split and interleaved pairing), `llama3` frequency scaling (LLaMA 3.1 / 3.2, Step 3.5 Flash), YaRN (OLMo 3, DeepSeek, Mistral Small 4 / Large 3, GPT-OSS, Laguna), partial rotary embeddings (GLM, Step, Laguna), per-layer-type RoPE settings (Gemma 3, Step, Laguna), layers with no positional encoding at all (LLaMA 4)
-  - Attention: MHA, GQA, **multi-head latent attention** (DeepSeek, Mistral Small 4 / Large 3), sliding-window and chunked-attention layer patterns (Gemma 2/3, OLMo 3, GPT-OSS, Step, Laguna, LLaMA 4), per-head attention sinks (GPT-OSS), per-head output gates (Step, Laguna), per-layer head counts, QK-norm, attention-logit and final-logit soft-capping (Gemma 2), position-dependent query scaling (LLaMA 4, Mistral Small 4 / Large 3)
+  - Positional encoding: RoPE (half-split and interleaved pairing), `llama3` frequency scaling (LLaMA 3.1 / 3.2, Step 3.5 Flash), YaRN (OLMo 3, DeepSeek, Mistral Small 4 / Large 3, GPT-OSS, Laguna), partial rotary embeddings (GLM-4.x, Step, Laguna), per-layer-type RoPE settings (Gemma 3, Step, Laguna), layers with no positional encoding at all (LLaMA 4)
+  - Attention: MHA, GQA, **multi-head latent attention** (DeepSeek, GLM-5, Mistral Small 4 / Large 3), **DeepSeek Sparse Attention** with a lightning indexer and cross-layer indexer sharing (GLM-5 / 5.1 / 5.2), sliding-window and chunked-attention layer patterns (Gemma 2/3, OLMo 3, GPT-OSS, Step, Laguna, LLaMA 4), per-head attention sinks (GPT-OSS), per-head output gates (Step, Laguna), per-layer head counts, QK-norm, attention-logit and final-logit soft-capping (Gemma 2), position-dependent query scaling (LLaMA 4, Mistral Small 4 / Large 3)
   - Normalisation and scaling: RMSNorm (including zero-centred and weight-free variants), LayerNorm (Phi-1 / 1.5), pre-norm and post-norm block layouts, Granite's embedding / residual / logit multipliers
   - Feed-forward: gated SwiGLU-style MLPs (including clamped and biased variants), and many **sparse MoE** designs: sigmoid routing with a selection bias and group-limited top-k (GLM, DeepSeek V3, Step, Sarvam, Laguna), softmax routing (Qwen3, DeepSeek V2, Mistral), top-k-then-softmax (GPT-OSS), top-1 sigmoid gating that scales the expert input (LLaMA 4), shared experts and dense leading layers
 - **Attention mechanisms from first principles.** A separate [`attention-mechanisms/`](attention-mechanisms) folder implements the building blocks on their own — useful as a learning path before reading the full models.
@@ -62,7 +62,7 @@ Implemented families: **OLMo 2 / 3, Qwen 1.5 / 2.5 / 3 (dense and MoE), DeepSeek
 ├── Alibaba/                     # Qwen1.5, Qwen2.5, Qwen3 (dense and MoE)
 ├── BOSS Zhipin/                 # Nanbeige
 ├── Cisco/                       # Antares
-├── Cohere/                      # Tiny Aya
+├── Cohere/                      # Tiny Aya, Command A+, North Mini Code
 ├── Deepseek/                    # DeepSeek V2, V3, R1, V3.2, V4
 ├── GLM_Series/                  # GLM-4.5, 4.5-Air, 4.7, 5.x
 ├── Google/                      # Gemma 1, 2, 3, 4
@@ -165,7 +165,7 @@ _Qwen1.5 / Qwen2.5 / Qwen3 dense models (RoPE, RMSNorm, SwiGLU, GQA where applic
 | Qwen1.5-4B | ✅ Implemented | [`Alibaba/Qwen1.5/Dense/Qwen1.5-4B`](Alibaba/Qwen1.5/Dense/Qwen1.5-4B) |
 | Qwen1.5-72B | ✅ Implemented | [`Alibaba/Qwen1.5/Dense/Qwen1.5-72B`](Alibaba/Qwen1.5/Dense/Qwen1.5-72B) |
 | Qwen1.5-7B | ✅ Implemented | [`Alibaba/Qwen1.5/Dense/Qwen1.5-7B`](Alibaba/Qwen1.5/Dense/Qwen1.5-7B) |
-| Qwen1.5(14B-A2.7B) | 📁 Placeholder | [`Alibaba/Qwen1.5/MOE/Qwen1.5(14B-A2.7B)`](Alibaba/Qwen1.5/MOE/Qwen1.5%2814B-A2.7B%29) |
+| Qwen1.5(14B-A2.7B) | 🚧 Config + tokenizer only | [`Alibaba/Qwen1.5/MOE/Qwen1.5(14B-A2.7B)`](Alibaba/Qwen1.5/MOE/Qwen1.5%2814B-A2.7B%29) |
 | Qwen2.5-0.5B | ✅ Implemented | [`Alibaba/qwen2.5/Qwen2.5-0.5B`](Alibaba/qwen2.5/Qwen2.5-0.5B) |
 | Qwen2.5-1.5B | ✅ Implemented | [`Alibaba/qwen2.5/Qwen2.5-1.5B`](Alibaba/qwen2.5/Qwen2.5-1.5B) |
 | Qwen2.5-14B | ✅ Implemented | [`Alibaba/qwen2.5/Qwen2.5-14B`](Alibaba/qwen2.5/Qwen2.5-14B) |
@@ -211,11 +211,13 @@ _Llama-style GQA decoder._
 </details>
 
 <details>
-<summary><b>Cohere</b> &nbsp;·&nbsp; 0 implemented / 1 total</summary>
+<summary><b>Cohere</b> &nbsp;·&nbsp; 0 implemented / 3 total</summary>
 
 
 | Model | Status | Folder |
 |---|---|---|
+| Command A+ (218B-A25B) | 🚧 Config + tokenizer only | [`Cohere/Command A+ (218B-A25B)`](Cohere/Command%20A%2B%20%28218B-A25B%29) |
+| North Mini Code (30B-A3B) | 🚧 Config + tokenizer only | [`Cohere/North Mini Code (30B-A3B)`](Cohere/North%20Mini%20Code%20%2830B-A3B%29) |
 | Tiny Aya (3.35B) | 🚧 Config + tokenizer only | [`Cohere/Tiny Aya (3.35B)`](Cohere/Tiny%20Aya%20%283.35B%29) |
 
 </details>
@@ -240,10 +242,10 @@ _DeepSeek-V2 and V3: multi-head latent attention, YaRN RoPE with the `mscale²` 
 </details>
 
 <details>
-<summary><b>GLM (Zhipu AI)</b> &nbsp;·&nbsp; 3 implemented / 7 total</summary>
+<summary><b>GLM (Zhipu AI)</b> &nbsp;·&nbsp; 6 implemented / 7 total</summary>
 
 
-_GLM-4.5 family: Mixture-of-Experts with sigmoid routing, group-limited top-k, shared experts, dense-first-k layers, partial RoPE, optional QK-norm._
+_GLM-4.5 family: Mixture-of-Experts with sigmoid routing, group-limited top-k, shared experts, dense-first-k layers, partial RoPE, optional QK-norm. GLM-5 / 5.1 / 5.2: multi-head latent attention plus DeepSeek Sparse Attention (a small "lightning indexer" keeps the 2048 best tokens per query) with a shared-expert MoE; GLM-5.2 additionally shares the indexer's selection across layers (21 of its 78 layers run their own indexer). GLM-5 and GLM-5.1 share one file because their configs are identical. The multi-token-prediction layers are not implemented._
 
 
 | Model | Status | Folder |
@@ -251,9 +253,9 @@ _GLM-4.5 family: Mixture-of-Experts with sigmoid routing, group-limited top-k, s
 | GLM-4.5 (355B) | ✅ Implemented | [`GLM_Series/GLM-4.5 (355B)`](GLM_Series/GLM-4.5%20%28355B%29) |
 | GLM-4.5-Air (106B) | ✅ Implemented | [`GLM_Series/GLM-4.5-Air (106B)`](GLM_Series/GLM-4.5-Air%20%28106B%29) |
 | GLM-4.7 (355B) | ✅ Implemented | [`GLM_Series/GLM-4.7 (355B)`](GLM_Series/GLM-4.7%20%28355B%29) |
-| GLM-5 (744B) | 🚧 Config + tokenizer only | [`GLM_Series/GLM-5 (744B)`](GLM_Series/GLM-5%20%28744B%29) |
-| GLM-5.1 (744B) | 📁 Placeholder | [`GLM_Series/GLM-5.1 (744B)`](GLM_Series/GLM-5.1%20%28744B%29) |
-| GLM-5.2 (744B) | 🚧 Config + tokenizer only | [`GLM_Series/GLM-5.2 (744B)`](GLM_Series/GLM-5.2%20%28744B%29) |
+| GLM-5 (744B) | ✅ Implemented | [`GLM_Series/GLM-5 (744B)`](GLM_Series/GLM-5%20%28744B%29) |
+| GLM-5.1 (744B) | ✅ Implemented | [`GLM_Series/GLM-5.1 (744B)`](GLM_Series/GLM-5.1%20%28744B%29) |
+| GLM-5.2 (744B) | ✅ Implemented | [`GLM_Series/GLM-5.2 (744B)`](GLM_Series/GLM-5.2%20%28744B%29) |
 | GLM-5.3-Flash (320B) | 🚧 Config + tokenizer only | [`GLM_Series/GLM-5.3-Flash (320B)`](GLM_Series/GLM-5.3-Flash%20%28320B%29) |
 
 </details>
@@ -525,7 +527,7 @@ Being precise about what "implemented" means here:
 | Are those comparison scripts in this repository? | **No.** They were run outside the repo and are not committed. There is no automated test suite or CI yet. |
 | Does inference use a KV cache or sampling? | **Mostly no.** Generation is greedy and recomputes the full sequence each step. The one exception is `OLMo 2 (7B)/model_with_kv_cache.py`. |
 
-**Checked against `transformers`:** Gemma 3 4B / 12B / 27B, Mistral Small 4, Mistral Large 3 (against `transformers`' Mistral 4 and DeepSeek-V2 code, since Large 3 has no `transformers` implementation), Qwen3 Coder Flash / 30B-A3B / 235B-A22B, INTELLECT-3 (which shares its code with GLM-4.5-Air), DeepSeek V2 and V3, GPT-OSS 20B / 120B, Granite 4.1 3B / 8B / 30B, and LLaMA 4 Maverick.
+**Checked against `transformers`:** Gemma 3 4B / 12B / 27B, Mistral Small 4, Mistral Large 3 (against `transformers`' Mistral 4 and DeepSeek-V2 code, since Large 3 has no `transformers` implementation), Qwen3 Coder Flash / 30B-A3B / 235B-A22B, INTELLECT-3 (which shares its code with GLM-4.5-Air), DeepSeek V2 and V3, GLM-5 / 5.1 / 5.2 (against the newest `glm_moe_dsa` source of Hugging Face `transformers`, because the released 5.5.x versions predate its indexer sharing and use a different RoPE pairing), GPT-OSS 20B / 120B, Granite 4.1 3B / 8B / 30B, and LLaMA 4 Maverick.
 
 **Checked against the model authors' official Hugging Face code:** Step 3.5 Flash, Sarvam 30B, Laguna XS.2 and XS 2.1.
 
@@ -541,7 +543,7 @@ Issues already identified, listed so nobody is surprised:
 - **OLMo 2 (7B) block layout needs confirming.** It is currently written with pre-norm; OLMo 2 is believed to normalise the attention and FFN *outputs* (as the OLMo 3 file does). Not yet checked against the reference code.
 - **OLMo 3 applies YaRN to every layer.** Whether the sliding-window layers should use plain RoPE instead is still to be verified.
 - **Mistral Small 3.1's demo cannot run as shipped:** `main()` opens `tokenizer_config.json`, which is not in that folder. The model covers the text decoder only (no vision tower).
-- **Multi-token-prediction modules are not implemented** (DeepSeek V3, Step 3.5 Flash). They are only used for speculative decoding and training. **Vision encoders are not implemented** for any model.
+- **Multi-token-prediction modules are not implemented** (DeepSeek V3, GLM-4.7, GLM-5 / 5.1 / 5.2, Step 3.5 Flash). They are only used for speculative decoding and training. **Vision encoders are not implemented** for any model.
 - **Demos for large models need far more memory than typical hardware**: a model with hundreds of billions of parameters needs hundreds of GB to several TB in fp32. The parameter counts of these configs were checked on PyTorch's `meta` device instead.
 - **Code style is not yet uniform across families.** Older folders (e.g. LLaMA 1/2/3, Qwen dense, Gemma 1, Phi) use a positional-argument attention constructor, an in-file `Rope` module and a `CustomDataset` helper; newer ones use `cfg`-dict constructors, `compute_rope_params` / `apply_rope`, one shared RoPE table per model, and read their `config.json` directly. Models within a family are near-duplicates that differ only in their config values.
 
@@ -551,7 +553,7 @@ Planned work, roughly in priority order. Nothing below is implemented yet.
 
 - [ ] **Correctness:** add the logit-comparison scripts to the repository, plus weight-loading scripts and comparisons on real small checkpoints (e.g. Qwen2.5-0.5B, LLaMA 3.2 1B, Gemma 3 1B, OLMo 2/3 7B)
 - [ ] Verify or fix the older implementations listed under [known limitations](#known-limitations) (the Qwen dense models, OLMo, LLaMA 1 / 2 / 3, Gemma 1 / 2 / 3 1B, Phi)
-- [ ] **Implement the remaining 🚧 models**, prioritising new ideas over extra sizes: DeepSeek R1 / V3.2 / V4, Gemma 4, Nemotron 3, MiniMax M2+, MiMo, GLM-5.x, Laguna S 2.1, Sarvam 105B, SmolLM3, Tiny Aya
+- [ ] **Implement the remaining 🚧 models**, prioritising new ideas over extra sizes: DeepSeek R1 / V3.2 / V4, Gemma 4, Nemotron 3, MiniMax M2+, MiMo, GLM-5.3-Flash, Command A+, North Mini Code, Laguna S 2.1, Sarvam 105B, SmolLM3, Tiny Aya
 - [ ] Unify code style on the newer `cfg`-dict / `compute_rope_params` structure; share one implementation per family
 - [ ] KV cache and sampling (temperature, top-k, top-p) for the other models; chat templates
 - [ ] Parameter-count and memory-estimate script (instantiate on the `meta` device to sanity-check configs)
