@@ -1,1 +1,3 @@
 __pycache__/
+# Models downloaded by inference/download_model.py
+inference/hf_models/
