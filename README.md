@@ -582,7 +582,6 @@ Issues already identified, listed so nobody is surprised:
 - **Qwen1.5 and Qwen2.5 are configured with `bias_qkv: False`.** The reference models use a bias on the Q/K/V projections.
 - **OLMo 2 (7B) block layout needs confirming.** It is currently written with pre-norm; OLMo 2 is believed to normalise the attention and FFN *outputs* (as the OLMo 3 file does). Not yet checked against the reference code.
 - **OLMo 3 applies YaRN to every layer.** Whether the sliding-window layers should use plain RoPE instead is still to be verified.
-- **Mistral Small 3.1's demo cannot run as shipped:** `main()` opens `tokenizer_config.json`, which is not in that folder. The model covers the text decoder only (no vision tower).
 - **Multi-token-prediction modules are not implemented** (DeepSeek V3, GLM-4.7, GLM-5 / 5.1 / 5.2, Step 3.5 Flash, MiniMax M2 / M2.5 / M2.7 / M3). They are only used for speculative decoding and training. **Vision and audio encoders are not implemented** for any model.
 - **MiniMax M3's indexer is computed densely**, so its memory grows quadratically with the sequence length. That is fine for reading and testing, but it is not a long-context kernel.
 - **Gemma 4 E2B / E4B demos are heavy:** their per-layer embedding tables add 2.4B / 2.8B parameters, so the full-size `main()` needs roughly 18 GB / 30 GB in fp32.
