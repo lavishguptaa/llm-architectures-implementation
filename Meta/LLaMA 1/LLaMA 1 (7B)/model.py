@@ -169,9 +169,11 @@ class Model(nn.Module):
             self.out_proj.weight = self.tok_emb.weight
 
         
+        context_length = cfg.get("max_position_embeddings", cfg.get("max_sequence_length"))
+
         head_dim = cfg["hidden_size"] // cfg["num_attention_heads"]
         cos, sin = compute_rope_params(
-            head_dim, cfg.get("rope_theta", 10000.0), cfg["max_position_embeddings"]
+            head_dim, cfg.get("rope_theta", 10000.0), context_length
         )
         self.register_buffer("cos", cos, persistent=False)
         self.register_buffer("sin", sin, persistent=False)
@@ -180,7 +182,7 @@ class Model(nn.Module):
         if idx.size(1) > self.cos.size(0):
             raise ValueError(
                 f"Sequence length {idx.size(1)} exceeds "
-                f"max_position_embeddings {self.cos.size(0)}"
+                f"the context length {self.cos.size(0)}"
             )
 
         x = self.tok_emb(idx)
@@ -236,7 +238,7 @@ def main():
         model=model,
         idx=encoded_tensor,
         max_new_tokens=10,
-        context_size=cfg["max_position_embeddings"]
+        context_size=model.cos.size(0)
     )
     decoded_text = tokenizer.decode(out.squeeze(0).tolist())
 
