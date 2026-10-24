@@ -599,7 +599,6 @@ Planned work, roughly in priority order. Nothing below is implemented yet.
 - [ ] KV cache and sampling (temperature, top-k, top-p) for the other models; chat templates
 - [ ] Parameter-count and memory-estimate script (instantiate on the `meta` device to sanity-check configs)
 - [ ] Automated smoke tests and CI; `pyproject.toml` packaging
-- [ ] Reduce repository size (shared tokenizers, a single `docs/` folder for diagrams)
 - [ ] Architecture comparison tables (attention type, norm placement, positional encoding, dense vs. MoE)
 
 ## Contributing
