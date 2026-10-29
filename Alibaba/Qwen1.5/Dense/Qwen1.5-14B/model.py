@@ -124,7 +124,7 @@ class Rope(nn.Module):
     
 class MultiHeadAttention(nn.Module):
     
-    def __init__(self,num_heads,d_in,d_out,context_length,attention_dropout,rope_base,bias_qkv=False):
+    def __init__(self,num_heads,d_in,d_out,context_length,attention_dropout,rope_base,bias_qkv=True):
         super().__init__()
         
         assert d_in % num_heads == 0, "d_in must be divisible by num_heads"
@@ -138,7 +138,8 @@ class MultiHeadAttention(nn.Module):
         self.W_v = nn.Linear(d_in,d_out,bias=bias_qkv)
         
         
-        self.out_proj = nn.Linear(d_out,d_out)
+        # Qwen2 puts a bias on the query / key / value projections (bias_qkv) and none on the output projection
+        self.out_proj = nn.Linear(d_out,d_out,bias=False)
         self.attention_dropout = nn.Dropout(attention_dropout)
         
         self.rope = Rope(
@@ -296,7 +297,7 @@ def main():
         "context_length": 32768,
         "num_heads": 40,
         "num_layers": 40,
-        "bias_qkv": False,
+        "bias_qkv": True,
         "rms_norm_eps":1e-06,
         "attention_dropout": 0.0,
         "rope_theta": 1000000.0
