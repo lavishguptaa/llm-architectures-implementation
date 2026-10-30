@@ -113,7 +113,7 @@ class GroupedQueryAttention(nn.Module):
             d_in,
             d_out, 
             rope_base,
-            bias_qkv=False,
+            bias_qkv=True,
         ):
         
         super().__init__()
@@ -132,7 +132,8 @@ class GroupedQueryAttention(nn.Module):
         self.W_k = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         self.W_v = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         
-        self.out_proj = nn.Linear(d_in, d_out,bias=bias_qkv)
+        # Qwen2 puts a bias on the query / key / value projections (bias_qkv) and none on the output projection
+        self.out_proj = nn.Linear(d_in, d_out,bias=False)
         
         self.rope = Rope(
             head_dim=self.head_dim,
@@ -362,7 +363,7 @@ def main():
         "attention_dropout": 0.0,
         "resid_dropout": 0.0,
         "embd_dropout": 0.0,
-        "bias_qkv": False,
+        "bias_qkv": True,
         "rope_base": 1000000.0,
         "rms_norm_eps": 1e-05,
     }
