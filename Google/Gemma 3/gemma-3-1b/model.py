@@ -209,6 +209,11 @@ class Model(nn.Module):
 
         self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["hidden_size"])
 
+        # Gemma multiplies the token embeddings by sqrt(hidden_size)
+        self.register_buffer(
+            "emb_scale", torch.tensor(cfg["hidden_size"] ** 0.5), persistent=False
+        )
+
         # Every sliding_window_pattern-th layer (6, 12, 18, 24) is global
         pattern = cfg["sliding_window_pattern"]
         layer_types = [
