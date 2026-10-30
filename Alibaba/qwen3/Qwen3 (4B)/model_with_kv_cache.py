@@ -113,14 +113,17 @@ class GroupedQueryAttention(nn.Module):
             d_in,
             d_out, 
             rope_base,
-            bias_qkv=False,
+            bias_qkv,  
+            head_dim=None,
+            rms_norm_eps=1e-06,
         ):
         
         super().__init__()
         assert d_in % num_heads == 0, "d_in must be divisible by num_heads"
         
         self.num_heads = num_heads
-        self.head_dim = d_in // num_heads
+        # Qwen3 sets the head size in the config: it is not hidden_size / num_heads
+        self.head_dim = head_dim if head_dim is not None else d_in // num_heads
         self.kv_head = kv_head
         
         self.d_in = d_in
@@ -132,7 +135,10 @@ class GroupedQueryAttention(nn.Module):
         self.W_k = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         self.W_v = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         
-        self.out_proj = nn.Linear(d_in, d_out,bias=bias_qkv)
+        self.q_norm = RMSNorm(self.head_dim, eps=rms_norm_eps)
+        self.k_norm = RMSNorm(self.head_dim, eps=rms_norm_eps)
+
+        self.out_proj = nn.Linear(num_heads * self.head_dim, d_out,bias=bias_qkv)
         
         self.rope = Rope(
             head_dim=self.head_dim,
@@ -159,6 +165,9 @@ class GroupedQueryAttention(nn.Module):
         Q = Q.transpose(1, 2)
         K = K.transpose(1, 2)
         V = V.transpose(1, 2)
+
+        Q = self.q_norm(Q)
+        K = self.k_norm(K)
         
         # New tokens get their absolute positions instead of restarting at 0
         positions = torch.arange(past_len, past_len + num_tokens, device=x.device)
@@ -205,7 +214,7 @@ class GroupedQueryAttention(nn.Module):
         context = context.view(
             batch_size,
             num_tokens,
-            self.d_out,
+            self.num_heads * self.head_dim,
         )
 
 
@@ -260,7 +269,9 @@ class TransformerBlock(nn.Module):
             context_length = cfg['context_length'],
             bias_qkv = cfg['bias_qkv'],
             rope_base = cfg['rope_base'],
-            attention_dropout=cfg["attention_dropout"]
+            attention_dropout=cfg["attention_dropout"],
+            head_dim = cfg['head_dim'],
+            rms_norm_eps = cfg['rms_norm_eps']
         )
         
         self.layer1 = RMSNorm(cfg['emb_dim'],eps=cfg["rms_norm_eps"])
@@ -356,6 +367,7 @@ def main():
         "context_length": 40960,
         "num_heads": 32,
         "kv_head": 8,
+        "head_dim": 128,
         "num_layers": 36,
         "attention_dropout": 0.0,
         "resid_dropout": 0.0,
