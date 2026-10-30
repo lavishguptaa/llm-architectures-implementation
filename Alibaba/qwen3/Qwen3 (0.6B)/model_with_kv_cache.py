@@ -127,7 +127,7 @@ class GroupedQueryAttention(nn.Module):
             dropout, d_in,
             d_out,
             rope_base,
-            bias_qkv=False,
+            bias_qkv,
         ):
         
         
