@@ -1,0 +1,325 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import json
+from tokenizers import Tokenizer
+
+
+def compute_rope_params(head_dim, theta_base, context_length):
+
+    assert head_dim % 2 == 0, "head_dim must be even"
+
+    inv_freq = 1.0 / (
+        theta_base ** (torch.arange(0, head_dim, 2).float() / head_dim)
+    )
+
+    positions = torch.arange(context_length).float()
+
+    angles = torch.outer(positions, inv_freq)
+    angles = torch.cat([angles, angles], dim=-1)
+
+    return torch.cos(angles), torch.sin(angles)
+
+
+def apply_rope(x, cos, sin, start_pos=0):
+
+    batch_size, num_heads, seq_len, head_dim = x.shape
+
+    cos = cos[start_pos:start_pos + seq_len, :].to(x.device, dtype=x.dtype)
+    sin = sin[start_pos:start_pos + seq_len, :].to(x.device, dtype=x.dtype)
+
+    cos = cos.unsqueeze(0).unsqueeze(0)
+    sin = sin.unsqueeze(0).unsqueeze(0)
+
+    x1 = x[..., :head_dim // 2]
+    x2 = x[..., head_dim // 2:]
+
+    rotated = torch.cat([-x2, x1], dim=-1)
+
+    return (x * cos) + (rotated * sin)
+
+
+class RMSNorm(nn.Module):
+    # Gemma scales by (1 + weight), so the weight is zero-initialised
+    def __init__(self, emb_dim, eps):
+        super().__init__()
+
+        self.eps = eps
+
+        self.weight = nn.Parameter(torch.zeros(emb_dim))
+
+    def forward(self, x):
+        x_float = x.float()
+
+        rms = torch.sqrt(
+            torch.mean(x_float ** 2, dim=-1, keepdim=True) + self.eps
+        )
+
+        x_float = x_float / rms
+
+        return (x_float * (1.0 + self.weight.float())).to(x.dtype)
+
+
+class GroupedQueryAttention(nn.Module):
+    def __init__(self, cfg, attention_type):
+        super().__init__()
+
+        if attention_type not in {"full_attention", "sliding_attention"}:
+            raise ValueError(f"Unsupported attention_type: {attention_type}")
+
+        self.num_heads = cfg["num_attention_heads"]
+        self.num_key_value_heads = cfg["num_key_value_heads"]
+        self.head_dim = cfg["head_dim"]
+
+        if self.num_heads % self.num_key_value_heads != 0:
+            raise ValueError("num_attention_heads must be divisible by num_key_value_heads")
+
+        d_in = cfg["hidden_size"]
+        d_out = self.num_heads * self.head_dim
+
+        self.num_groups = self.num_heads // self.num_key_value_heads
+        self.attention_type = attention_type
+        self.sliding_window = cfg["sliding_window"]
+        self.attention_dropout_p = cfg["attention_dropout"]
+        self.attn_logit_softcapping = cfg["attn_logit_softcapping"]
+        self.scale = cfg["query_pre_attn_scalar"] ** -0.5
+
+        bias = cfg["attention_bias"]
+        self.W_q = nn.Linear(d_in, self.num_heads * self.head_dim, bias=bias)
+        self.W_k = nn.Linear(d_in, self.num_key_value_heads * self.head_dim, bias=bias)
+        self.W_v = nn.Linear(d_in, self.num_key_value_heads * self.head_dim, bias=bias)
+        self.out_proj = nn.Linear(d_out, d_in, bias=bias)
+
+        cos, sin = compute_rope_params(
+            self.head_dim, cfg["rope_theta"], cfg["max_position_embeddings"]
+        )
+        self.register_buffer("cos", cos, persistent=False)
+        self.register_buffer("sin", sin, persistent=False)
+
+    def forward(self, x, layer_cache=None):
+        # layer_cache: (K, V) from earlier steps, each [batch, kv_heads, past_len, head_dim].
+        # Only the key/value heads are cached (before they are repeated for the query groups).
+        batch_size, num_tokens, _ = x.shape
+
+        past_len = 0 if layer_cache is None else layer_cache[0].size(2)
+
+        Q = self.W_q(x).view(
+            batch_size, num_tokens, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+
+        K = self.W_k(x).view(
+            batch_size, num_tokens, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+
+        V = self.W_v(x).view(
+            batch_size, num_tokens, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+
+        Q = apply_rope(Q, self.cos, self.sin, start_pos=past_len)
+        K = apply_rope(K, self.cos, self.sin, start_pos=past_len)
+
+        # Keys are cached after RoPE, so they are never recomputed
+        if layer_cache is not None:
+            K = torch.cat([layer_cache[0], K], dim=2)
+            V = torch.cat([layer_cache[1], V], dim=2)
+
+        new_cache = (K, V)
+
+        # Share each key-value head across its group of query heads
+        K = K.repeat_interleave(self.num_groups, dim=1)
+        V = V.repeat_interleave(self.num_groups, dim=1)
+
+        # Attention is written out because the logits are soft-capped,
+        # which scaled_dot_product_attention cannot do
+        scores = (Q @ K.transpose(2, 3)) * self.scale
+
+        if self.attn_logit_softcapping is not None:
+            scores = scores / self.attn_logit_softcapping
+            scores = torch.tanh(scores)
+            scores = scores * self.attn_logit_softcapping
+
+        # The queries are the new tokens; the keys are the whole sequence, cached keys included
+        q_pos = torch.arange(past_len, past_len + num_tokens, device=x.device)[:, None]
+        k_pos = torch.arange(past_len + num_tokens, device=x.device)[None, :]
+
+        mask = k_pos <= q_pos
+
+        if self.attention_type == "sliding_attention":
+            mask = mask & (k_pos > q_pos - self.sliding_window)
+
+        scores = scores.masked_fill(~mask, float("-inf"))
+
+        weights = torch.softmax(scores.float(), dim=-1).to(Q.dtype)
+        weights = F.dropout(
+            weights, p=self.attention_dropout_p, training=self.training
+        )
+
+        context = (weights @ V).transpose(1, 2).contiguous().view(
+            batch_size, num_tokens, self.num_heads * self.head_dim
+        )
+
+        return self.out_proj(context), new_cache
+
+
+class FeedForward(nn.Module):
+
+    def __init__(self, emb_dim, hidden_dim):
+        super().__init__()
+
+        self.gate_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.up_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.down_proj = nn.Linear(hidden_dim, emb_dim, bias=False)
+
+    def forward(self, x):
+        gate = F.gelu(self.gate_proj(x), approximate="tanh")
+        value = self.up_proj(x)
+
+        return self.down_proj(gate * value)
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, cfg, attention_type):
+        super().__init__()
+
+        emb_dim = cfg["hidden_size"]
+        eps = cfg["rms_norm_eps"]
+
+        self.attn = GroupedQueryAttention(cfg, attention_type)
+        self.ffn = FeedForward(emb_dim, cfg["intermediate_size"])
+
+        self.input_norm = RMSNorm(emb_dim, eps)
+        self.post_attn_norm = RMSNorm(emb_dim, eps)
+        self.pre_ffn_norm = RMSNorm(emb_dim, eps)
+        self.post_ffn_norm = RMSNorm(emb_dim, eps)
+
+    def forward(self, x, layer_cache=None):
+        shortcut = x
+        x = self.input_norm(x)
+        x, new_cache = self.attn(x, layer_cache)
+        x = self.post_attn_norm(x)
+        x = x + shortcut
+
+        shortcut = x
+        x = self.pre_ffn_norm(x)
+        x = self.ffn(x)
+        x = self.post_ffn_norm(x)
+        x = x + shortcut
+
+        return x, new_cache
+
+
+class Model(nn.Module):
+
+    def __init__(self, cfg):
+        super().__init__()
+
+        self.emb_scale = cfg["hidden_size"] ** 0.5
+        self.final_logit_softcapping = cfg["final_logit_softcapping"]
+
+        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["hidden_size"])
+
+        # Layers alternate: sliding_attention, full_attention, sliding_attention, ...
+        layer_types = [
+            "sliding_attention" if i % 2 == 0 else "full_attention"
+            for i in range(cfg["num_hidden_layers"])
+        ]
+
+        self.blocks = nn.ModuleList(
+            [TransformerBlock(cfg, attention_type) for attention_type in layer_types]
+        )
+
+        self.out_norm_layer = RMSNorm(cfg["hidden_size"], cfg["rms_norm_eps"])
+        self.out_proj = nn.Linear(cfg["hidden_size"], cfg["vocab_size"], bias=False)
+        self.out_proj.weight = self.tok_emb.weight
+
+    def forward(self, idx, cache=None, use_cache=False):
+        # cache: list with one (K, V) pair per layer, from the previous forward call
+        # use_cache=False returns logits only; use_cache=True returns (logits, cache)
+        past_len = 0 if cache is None else cache[0][0].size(2)
+
+        if past_len + idx.size(1) > self.blocks[0].attn.cos.size(0):
+            raise ValueError(
+                f"Sequence length {past_len + idx.size(1)} exceeds "
+                f"max_position_embeddings {self.blocks[0].attn.cos.size(0)}"
+            )
+
+        x = self.tok_emb(idx) * self.emb_scale
+
+        new_cache = []
+
+        for layer_idx, block in enumerate(self.blocks):
+            layer_cache = None if cache is None else cache[layer_idx]
+            x, layer_cache = block(x, layer_cache)
+            new_cache.append(layer_cache)
+
+        x = self.out_norm_layer(x)
+        logits = self.out_proj(x)
+
+        if self.final_logit_softcapping is not None:
+            logits = logits / self.final_logit_softcapping
+            logits = torch.tanh(logits)
+            logits = logits * self.final_logit_softcapping
+        if use_cache:
+            return logits, new_cache
+        return logits
+
+
+def generate_text_simple(model, idx, max_new_tokens, context_size):
+
+    if idx.size(1) + max_new_tokens > context_size:
+        raise ValueError(
+            "prompt length + max_new_tokens must not exceed context_size "
+            "when using the KV cache"
+        )
+
+    with torch.no_grad():
+        # Prefill: process the whole prompt once and fill the cache
+        logits, cache = model(idx, use_cache=True)
+
+        for step in range(max_new_tokens):
+
+            logits = logits[:, -1, :]
+
+            idx_next = torch.argmax(logits, dim=-1, keepdim=True)
+
+            idx = torch.cat((idx, idx_next), dim=1)
+
+            # Decode: feed only the new token; earlier K/V come from the cache
+            if step < max_new_tokens - 1:
+                logits, cache = model(idx_next, cache=cache, use_cache=True)
+
+    return idx
+
+
+def main():
+
+    with open("config.json") as f:
+        cfg = json.load(f)
+
+    torch.manual_seed(42)
+    model = Model(cfg)
+    model.eval()
+
+    input_text = "Hello, how are you?"
+
+    tokenizer = Tokenizer.from_file("tokenizer.json")
+
+    input_ids = tokenizer.encode(input_text).ids
+    encoded_tensor = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0)
+
+    out = generate_text_simple(
+        model=model,
+        idx=encoded_tensor,
+        max_new_tokens=10,
+        context_size=cfg["max_position_embeddings"]
+    )
+    decoded_text = tokenizer.decode(out.squeeze(0).tolist())
+
+    print(f"\n\n{50*'='}\n{22*' '}OUT\n{50*'='}")
+    print("\nOutput:", out)
+    print("Output length:", len(out[0]))
+    print("Output text:", decoded_text)
+
+
+if __name__ == "__main__":
+    main()
