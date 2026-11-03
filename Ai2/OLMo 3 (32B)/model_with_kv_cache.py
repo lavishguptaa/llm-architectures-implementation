@@ -46,7 +46,7 @@ def create_dataloader(data, tokenizer, context_size=256, stride=128,
 
 
 
-def compute_rope_params(head_dim, cfg):
+def compute_rope_params(head_dim, cfg, scaled):
 
     theta_base = cfg["rope_theta"]
     context_length = cfg["context_length"]
@@ -57,11 +57,11 @@ def compute_rope_params(head_dim, cfg):
     rope_orig_max = rope_cfg["original_max_position_embeddings"]
     beta_fast = rope_cfg["beta_fast"]
     beta_slow = rope_cfg["beta_slow"]
-    attention_factor = rope_cfg["attention_factor"]
+    attention_factor = rope_cfg["attention_factor"] if scaled else 1.0
 
     assert head_dim % 2 == 0, "head_dim must be even"
 
-    if rope_type == "yarn":
+    if scaled and rope_type == "yarn":
 
         def find_correction_dim(num_rotations):
             return (
@@ -191,12 +191,12 @@ class GroupedQueryAttention(nn.Module):
         self.out_proj = nn.Linear(d_out, d_out, bias=False)
 
         self.q_norm = RMSNorm(
-            self.head_dim,
+            self.num_heads * self.head_dim,
             eps=cfg["rms_norm_eps"]
         )
 
         self.k_norm = RMSNorm(
-            self.head_dim,
+            self.num_key_value_heads * self.head_dim,
             eps=cfg["rms_norm_eps"]
         )
 
@@ -207,11 +207,11 @@ class GroupedQueryAttention(nn.Module):
 
         past_len = 0 if layer_cache is None else layer_cache[0].size(2)
 
-        Q = self.W_q(x).view(
+        Q = self.q_norm(self.W_q(x)).view(
             batch_size, num_tokens, self.num_heads, self.head_dim
         ).transpose(1, 2)
 
-        K = self.W_k(x).view(
+        K = self.k_norm(self.W_k(x)).view(
             batch_size, num_tokens, self.num_key_value_heads, self.head_dim
         ).transpose(1, 2)
 
@@ -219,8 +219,6 @@ class GroupedQueryAttention(nn.Module):
             batch_size, num_tokens, self.num_key_value_heads, self.head_dim
         ).transpose(1, 2)
         
-        Q = self.q_norm(Q)
-        K = self.k_norm(K)
         
         Q = apply_rope(Q, cos, sin, start_pos=past_len)
         K = apply_rope(K, cos, sin, start_pos=past_len)
@@ -349,12 +347,16 @@ class Model(nn.Module):
 
         self.blocks = nn.ModuleList(blocks)
         
-        cos, sin = compute_rope_params(
-            head_dim=cfg["emb_dim"] // cfg["num_heads"],
-            cfg=cfg
-        )
+        head_dim = cfg["emb_dim"] // cfg["num_heads"]
+
+        # Full-attention layers use YaRN-scaled RoPE; sliding-window layers use plain RoPE
+        cos, sin = compute_rope_params(head_dim=head_dim, cfg=cfg, scaled=True)
         self.register_buffer("cos", cos, persistent=False)
         self.register_buffer("sin", sin, persistent=False)
+
+        cos_sliding, sin_sliding = compute_rope_params(head_dim=head_dim, cfg=cfg, scaled=False)
+        self.register_buffer("cos_sliding", cos_sliding, persistent=False)
+        self.register_buffer("sin_sliding", sin_sliding, persistent=False)
         
         self.out_norm_layer = RMSNorm(cfg["emb_dim"],cfg['rms_norm_eps'])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
@@ -381,7 +383,10 @@ class Model(nn.Module):
 
         for layer_idx, block in enumerate(self.blocks):
             layer_cache = None if cache is None else cache[layer_idx]
-            x, layer_cache = block(x, self.cos, self.sin, layer_cache)
+            if block.attn.attention_type == "sliding_attention":
+                x, layer_cache = block(x, self.cos_sliding, self.sin_sliding, layer_cache)
+            else:
+                x, layer_cache = block(x, self.cos, self.sin, layer_cache)
             new_cache.append(layer_cache)
         x = self.out_norm_layer(x)
         logits = self.out_proj(x)
@@ -446,7 +451,6 @@ def main():
         },
 
         "layer_types": [
-            "sliding_attention", "sliding_attention", "sliding_attention", "full_attention",
             "sliding_attention", "sliding_attention", "sliding_attention", "full_attention",
             "sliding_attention", "sliding_attention", "sliding_attention", "full_attention",
             "sliding_attention", "sliding_attention", "sliding_attention", "full_attention",

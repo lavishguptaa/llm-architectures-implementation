@@ -120,9 +120,10 @@ class GroupedQueryAttention(nn.Module):
             kv_head, 
             context_length, 
             dropout, d_in,
-            d_out, 
+            d_out,
+            head_dim,
             bias_qkv=False,
-            rope_base=1000000
+            rope_base=1000000000.0
         ):
         
         super().__init__()
@@ -130,22 +131,23 @@ class GroupedQueryAttention(nn.Module):
         assert d_in % num_heads == 0, "d_in must be divisible by num_heads"
         
         self.num_heads = num_heads
-        self.head_dim = d_in // num_heads
+        # Mistral sets the head size in the config: it is not hidden_size / num_heads
+        self.head_dim = head_dim
         self.kv_head = kv_head
         
         self.d_out = d_out
         
-        self.W_q = nn.Linear(d_in, d_out, bias=bias_qkv)
+        self.W_q = nn.Linear(d_in, num_heads * self.head_dim, bias=bias_qkv)
         self.W_k = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         self.W_v = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         
-        self.out_proj = nn.Linear(d_in, d_out)
+        self.out_proj = nn.Linear(num_heads * self.head_dim, d_out, bias=bias_qkv)
         self.dropout = nn.Dropout(dropout)
         
         self.rope = Rope(
             head_dim=self.head_dim,
             seq_length=context_length,
-            theta=rope_base  # model.py passes base=, which Rope does not accept
+            theta=rope_base
         )
         
         self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length),diagonal=1).bool())
@@ -198,7 +200,7 @@ class GroupedQueryAttention(nn.Module):
         
         context_vector = context_vector.transpose(1, 2)
         
-        context_vector = context_vector.contiguous().view(batch_size,num_tokens,self.d_out)
+        context_vector = context_vector.contiguous().view(batch_size,num_tokens,self.num_heads * self.head_dim)
     
         context_vector = self.out_proj(context_vector)
         
@@ -206,7 +208,7 @@ class GroupedQueryAttention(nn.Module):
     
     
 class RMSNorm(nn.Module):
-    def __init__(self, emb_dim, eps=1e-6):
+    def __init__(self, emb_dim, eps=1e-5):
         super().__init__()
 
         self.eps = eps
@@ -254,6 +256,7 @@ class TransformerBlock(nn.Module):
             kv_head = cfg['kv_head'],
             d_in = cfg['emb_dim'],
             d_out = cfg['emb_dim'],
+            head_dim = cfg['head_dim'],
             context_length = cfg['context_length'],
             dropout = cfg['dropout'],
             bias_qkv = cfg['bias_qkv']
@@ -353,8 +356,9 @@ def main():
         "emb_dim": 5120,
         "hidden_dim" : 32768,
         "context_length": 128000,
-        "num_heads": 40,
+        "num_heads": 32,
         "kv_head": 8,
+        "head_dim": 128,
         "num_layers": 40,
         "dropout": 0.1,
         "bias_qkv": False
@@ -368,14 +372,8 @@ def main():
     input_text = "Hello, how are you?"
     
     tokenizer_path = "tokenizer.json"
-    tokenizer_config_path = "tokenizer_config.json"
 
     tokenizer = Tokenizer.from_file(tokenizer_path)
-
-    # Load tokenizer_config.json as well so the tokenizer setup stays tied
-    # to the same Hugging Face tokenizer files.
-    with open(tokenizer_config_path, "r", encoding="utf-8") as f:
-        tokenizer_config = json.load(f)
 
     tokenizer_vocab_size = tokenizer.get_vocab_size()
     if tokenizer_vocab_size != cfg["vocab_size"]:

@@ -218,21 +218,21 @@ class TransformerBlock(nn.Module):
         
         self.attn = MultiHeadAttention(cfg)
         
-        self.pre_attn_norm = RMSNorm(cfg['emb_dim'],cfg['rms_norm_eps'])
-        self.pre_ffn_norm = RMSNorm(cfg['emb_dim'],cfg['rms_norm_eps'])
+        self.layer1 = RMSNorm(cfg['emb_dim'],cfg['rms_norm_eps'])
+        self.layer2 = RMSNorm(cfg['emb_dim'],cfg['rms_norm_eps'])
         
         self.ffn = FeedForward(cfg['emb_dim'],cfg['intermediate_size'])
         
         
     def forward(self,x,cos,sin,layer_cache=None):
         shortcut = x
-        x = self.pre_attn_norm(x)
         x, new_cache = self.attn(x,cos,sin,layer_cache)
+        x = self.layer1(x)
         x = x + shortcut
 
         shortcut = x
-        x = self.pre_ffn_norm(x)
         x = self.ffn(x)
+        x = self.layer2(x)
         x = x + shortcut
 
         return x, new_cache
