@@ -21,7 +21,7 @@ This repository is a growing library of decoder-only LLM architectures written i
 | File | Purpose |
 |---|---|
 | `model.py` | Self-contained PyTorch implementation (attention, RoPE, norms, feed-forward / MoE, full model, greedy generation, and a runnable `main()` demo) |
-| `model_with_kv_cache.py` | The same model with a KV cache for faster generation (51 models; see [Verification status](#verification-status)). It is a separate file: `model.py` is unchanged |
+| `model_with_kv_cache.py` | The same model with a KV cache for faster generation (every model; see [Verification status](#verification-status)). It is a separate file: `model.py` is unchanged |
 | `config.json` | The model's official configuration, as published by its authors |
 | `tokenizer.json` | The model's Hugging Face tokenizer file, loaded with the `tokenizers` library |
 | `*.webp` / `*.png` | Architecture diagram (only some folders; in `assets/` for the Ai2, BOSS Zhipin and GLM models, next to `model.py` elsewhere) |
@@ -36,7 +36,7 @@ The goal is to make the differences *between* architectures easy to see: the sam
 | | Count |
 |---|---|
 | ✅ Models with a `model.py` implementation | **90** |
-| ⚡ Of those, models that also have a `model_with_kv_cache.py` | **51** |
+| ⚡ Of those, models that also have a `model_with_kv_cache.py` | **90** (all of them) |
 | 🚧 Models with only `config.json` + `tokenizer.json` (implementation pending) | **20** |
 | 📁 Reserved folders (no config or code yet) | **1** |
 | Standalone attention-mechanism implementations | **9** files |
@@ -53,7 +53,7 @@ Implemented families: **OLMo 2 / 3, Qwen 1.5 / 2.5 / 3 (dense and MoE), DeepSeek
   - Normalisation and scaling: RMSNorm (including zero-centred and weight-free variants), LayerNorm (Phi-1 / 1.5, Cohere), pre-norm, post-norm and **parallel** (attention and FFN read the same input) block layouts, Granite's embedding / residual / logit multipliers
   - Feed-forward: gated SwiGLU-style MLPs (including clamped and biased variants), and many **sparse MoE** designs: sigmoid routing with a selection bias and group-limited top-k (GLM, DeepSeek V3, Step, Sarvam, Laguna, MiniMax), softmax routing (Qwen3, Qwen1.5 MoE, DeepSeek V2, Mistral), top-k-then-softmax (GPT-OSS), top-k-then-sigmoid with averaged shared experts (Cohere), top-1 sigmoid gating that scales the expert input (LLaMA 4), shared experts and dense leading layers
 - **Attention mechanisms from first principles.** A separate [`attention-mechanisms/`](attention-mechanisms) folder implements the building blocks on their own — useful as a learning path before reading the full models.
-- **KV-cache variants.** For 51 of the models, a separate `model_with_kv_cache.py` sits next to `model.py` (which is left unchanged). It generates with a prefill step followed by one token at a time, caching the keys and values after RoPE; multi-head latent attention models cache the compressed latent instead, and MiniMax M3 also caches its sparse indexer's keys.
+- **KV-cache variants for every model.** A separate `model_with_kv_cache.py` sits next to each `model.py` (which is left unchanged). It generates with a prefill step followed by one token at a time, caching the keys and values after RoPE. Multi-head latent attention models (DeepSeek, GLM-5, Mistral Small 4 / Large 3) cache the compressed latent instead of per-head keys and values, models with a sparse indexer (GLM-5, MiniMax M3) also cache the indexer's keys, sliding-window and chunked layers use absolute-position masks, and Gemma 4's shared-KV layers store nothing of their own.
 - **Minimal dependencies:** `torch` and `tokenizers` (see [`requirements.txt`](requirements.txt)).
 
 ## Repository structure
@@ -166,7 +166,7 @@ Expand a vendor to see its models. Each row links to its folder.
 <summary><b>Ai2</b> &nbsp;·&nbsp; 3 implemented / 3 total</summary>
 
 
-_OLMo 2: QK-norm. OLMo 3: sliding/full attention layer pattern, YaRN RoPE scaling, QK-norm, GQA (32B). OLMo 2 (7B) also has a `model_with_kv_cache.py` that generates with a KV cache._
+_OLMo 2: QK-norm. OLMo 3: sliding/full attention layer pattern, YaRN RoPE scaling, QK-norm, GQA (32B). Every model also has a `model_with_kv_cache.py` that generates with a KV cache._
 
 
 | Model | Status | Folder |
@@ -350,7 +350,7 @@ _Granite 4.1 (3B, 8B, 30B): Llama-style GQA decoder with Granite's muP-style mul
 <summary><b>Meta</b> &nbsp;·&nbsp; 15 implemented / 16 total</summary>
 
 
-_LLaMA 1 (MHA) through 3.2 (GQA, `llama3` RoPE scaling in 3.1/3.2), and LLaMA 4 Maverick (text model: MoE with a shared expert, chunked attention, layers without positional encoding). LLaMA 1, 2, 3, 3.1 and 3.2 also have a `model_with_kv_cache.py` (LLaMA 4 Maverick does not yet)._
+_LLaMA 1 (MHA) through 3.2 (GQA, `llama3` RoPE scaling in 3.1/3.2), and LLaMA 4 Maverick (text model: MoE with a shared expert, chunked attention, layers without positional encoding). Every model also has a `model_with_kv_cache.py` (LLaMA 4's applies the chunk mask and the NoPE-layer query scaling with absolute positions)._
 
 
 | Model | Status | Folder |
@@ -566,33 +566,35 @@ Being precise about what "implemented" means here:
 | Can pretrained weights be loaded? | **Not yet.** There is no weight-loading or checkpoint-conversion code. |
 | Have outputs been compared with a reference implementation? | **For the models listed below, yes; for the rest, no.** The comparisons copy identical random weights into a small model of the same structure and into the reference, and compare logits (they agree to roughly 1e-5 or better in float32). Each also checks that the full-size configuration has exactly the same parameter count as the reference. The comparisons were also confirmed to be sensitive by deliberately breaking individual features and checking that the test fails; that was done for every model above except DeepSeek V2 / V3, INTELLECT-3, Mistral Large 3, the three Cohere models and VibeThinker-3B (for LLaMA 1 and LLaMA 2 it was done on one file per family, because the sizes share identical code; Granite was checked by switching off each multiplier in turn). |
 | Are those comparison scripts in this repository? | **No.** They were run outside the repo and are not committed. There is no automated test suite or CI yet. |
-| Does inference use a KV cache or sampling? | **A KV cache for 51 models, no sampling.** Those 51 (OLMo 2 7B, all Qwen, Granite, LLaMA 1 / 2 / 3 / 3.1 / 3.2, Phi, MiniMax M2 – M3 and Mistral Small 3.1 / 4 / Large 3) have a separate `model_with_kv_cache.py`. The other 39 implemented models recompute the full sequence each step. Generation is always greedy. |
+| Does inference use a KV cache or sampling? | **A KV cache for every implemented model (90 of 90), no sampling.** Each model has a separate `model_with_kv_cache.py`; generation is always greedy. |
 
-**Checked against `transformers`:** LLaMA 1 (7B / 13B / 30B / 65B) and LLaMA 2 (7B / 13B / 70B) (`Llama`), Gemma 3 270M (`Gemma3`), Gemma 4 31B / E2B / E4B (`Gemma4`, text model), MiniMax M3 (`minimax_m3_vl` text model, taken from the `transformers` main branch because no released version includes it yet), Gemma 3 4B / 12B / 27B, Mistral Small 4, Mistral Large 3 (against `transformers`' Mistral 4 and DeepSeek-V2 code, since Large 3 has no `transformers` implementation), Qwen3 Coder Flash / 30B-A3B / 235B-A22B, INTELLECT-3 (which shares its code with GLM-4.5-Air), DeepSeek V2 and V3, GLM-5 / 5.1 / 5.2 (against the newest `glm_moe_dsa` source of Hugging Face `transformers`, because the released 5.5.x versions predate its indexer sharing and use a different RoPE pairing), GPT-OSS 20B / 120B, Granite 4.1 3B / 8B / 30B, LLaMA 4 Maverick, Qwen1.5 14B-A2.7B (`Qwen2Moe`), SmolLM3, MiniMax M2 / M2.5 / M2.7 (the native `MiniMaxM2`, with the partial-rotary factor set to `rotary_dim / head_dim` as in MiniMax's official config), VibeThinker-3B (`Qwen2`), Tiny Aya (`Cohere2`), and North Mini Code / Command A+ (`Cohere2Moe`, taken from the `transformers` main branch because no released version includes it yet).
+**Checked against `transformers`:** LLaMA 1 (7B / 13B / 30B / 65B) and LLaMA 2 (7B / 13B / 70B) (`Llama`), Gemma 3 270M (`Gemma3`), Gemma 4 31B / E2B / E4B (`Gemma4`, text model), MiniMax M3 (`minimax_m3_vl` text model, taken from the `transformers` main branch because no released version includes it yet), Gemma 3 1B / 4B / 12B / 27B, Mistral Small 4, Mistral Large 3 (against `transformers`' Mistral 4 and DeepSeek-V2 code, since Large 3 has no `transformers` implementation), Qwen3 Coder Flash / 30B-A3B / 235B-A22B, INTELLECT-3 (which shares its code with GLM-4.5-Air), DeepSeek V2 and V3, GLM-5 / 5.1 / 5.2 (against the newest `glm_moe_dsa` source of Hugging Face `transformers`, because the released 5.5.x versions predate its indexer sharing and use a different RoPE pairing), GPT-OSS 20B / 120B, Granite 4.1 3B / 8B / 30B, LLaMA 4 Maverick, Qwen1.5 14B-A2.7B (`Qwen2Moe`), SmolLM3, MiniMax M2 / M2.5 / M2.7 (the native `MiniMaxM2`, with the partial-rotary factor set to `rotary_dim / head_dim` as in MiniMax's official config), VibeThinker-3B (`Qwen2`), Tiny Aya (`Cohere2`), and North Mini Code / Command A+ (`Cohere2Moe`, taken from the `transformers` main branch because no released version includes it yet).
+
+The Qwen1.5 and Qwen2.5 dense models (against `Qwen2`) and Qwen3 4B / 8B / 32B (against `Qwen3`) were compared with the quirks of their older layout neutralised: the feed-forward and output-head biases they add are set to zero, and each head's dimensions are reordered to match their interleaved RoPE. Their full-size parameter counts match exactly, excluding those extra biases.
 
 **Checked against the model authors' official Hugging Face code:** Step 3.5 Flash, Sarvam 30B, Laguna XS.2 and XS 2.1. Laguna S 2.1 uses the same file as XS 2.1; only its full-size parameter count (117.56 B, equal to a layer-by-layer count) and a shrunken forward pass were checked.
 
 The `main()` demos of the three Cohere models were also run end to end (real `config.json` and `tokenizer.json`, shrunk width and depth); the full-size ones need far more memory than typical hardware.
 
-**KV-cache files:** every `model_with_kv_cache.py` was compared with its own folder's `model.py` by loading identical random weights into both. Without a cache the logits are exactly equal; with a cache (prefill plus one token at a time, and chunks of several tokens) they agree to about 1e-6 in float32 (about 2e-5 for MiniMax M3 on larger logits, and to 4e-15 in float64), and greedy generation produces the same tokens. Deliberately broken versions (a wrong position offset, a wrong chunk mask, and for MiniMax M3 and Mistral's MLA models the indexer / query-scaling positions) were each caught. They copy their main file, so they inherit its quirks.
+**KV-cache files:** every `model_with_kv_cache.py` (all 90) was compared with its own folder's `model.py` by loading identical random weights into both. Without a cache the logits are exactly equal; with a cache (prefill plus one token at a time, and chunks of several tokens) they agree to about 1e-6 in float32 (up to about 6e-5 for the models with the largest logits, such as Step 3.5 Flash). In float64 most agree to about 1e-15; a few (Sarvam, GPT-OSS, Step 3.5 Flash, GLM-5 / 5.1 / 5.2) show about 1e-7 to 1e-6 even there, because their routers and indexers compute in float32. Greedy generation produces the same tokens in every case. Deliberately broken versions (a wrong position offset, chunk mask or sliding-window mask, and, where they exist, the attention sinks, output gates, soft-capping, shared-KV layers, query-scaling positions or cached indexer keys) were each caught. They copy their main file, so they inherit its quirks.
 
-**Not checked against any reference:** everything else, including OLMo 2 / 3, the other Qwen models, LLaMA 3 / 3.1 / 3.2, Gemma 1 / 2 / 3 (1B), Phi, Nanbeige, Antares, Mistral Small 3.1 and the GLM-4.5 / 4.5-Air / 4.7 folders themselves. Treat those as faithful *attempts* at the published architectures until logit-level verification is added.
+**Not checked against any reference:** everything else, including OLMo 2 / 3, Qwen3 (0.6B), LLaMA 3 / 3.1 / 3.2, Gemma 1 / 2, Phi, Nanbeige, Antares, Mistral Small 3.1 and the GLM-4.5 / 4.5-Air / 4.7 folders themselves. Treat those as faithful *attempts* at the published architectures until logit-level verification is added.
 
 ## Known limitations
 
 Issues already identified, listed so nobody is surprised:
 
-- **Gemma 3 (1B) cannot run a forward pass.** `Model.forward` uses `self.emb_scale`, which is never defined, so it raises `AttributeError`. The 4B / 12B / 27B files define it (the embeddings are scaled by `sqrt(hidden_size)`).
-- **Qwen3 (4B), (8B) and (32B) are missing QK-norm.** They do not contain the per-head query/key RMSNorm that the Qwen3 architecture uses. Qwen3 (0.6B) and the three Qwen3 MoE models do.
-- **Qwen1.5 and Qwen2.5 are configured with `bias_qkv: False`.** The reference models use a bias on the Q/K/V projections.
+- **Qwen3 (0.6B) uses the wrong head size.** It computes `hidden_size / num_heads` = 64, but the real `head_dim` is 128, as in the other Qwen3 models (which now read it from the config). It does have the QK-norm. Separately, Qwen2.5-14B's `main()` uses a vocabulary of 151,936 where its `config.json` says 152,064.
 - **OLMo 2 (7B) block layout needs confirming.** It is currently written with pre-norm; OLMo 2 is believed to normalise the attention and FFN *outputs* (as the OLMo 3 file does). Not yet checked against the reference code.
 - **OLMo 3 applies YaRN to every layer.** Whether the sliding-window layers should use plain RoPE instead is still to be verified.
-- **The KV-cache files cannot slide the context.** Dropping old tokens would invalidate the cached keys and their RoPE positions, so `generate_text_simple` raises an error if the prompt plus the new tokens exceeds the context length.
+- **The KV-cache files cannot slide the context, and sliding-window layers keep every key.** Dropping old tokens would invalidate the cached keys and their RoPE positions, so `generate_text_simple` raises an error if the prompt plus the new tokens exceeds the context length. The sliding-window layers only mask old keys, so their cache is not smaller; a rolling buffer is not implemented.
 - **Mistral Small 3.1's `model.py` cannot be constructed:** it passes `base=` to `Rope`, which only accepts `theta=`. Its `model_with_kv_cache.py` uses the correct argument (the main file is left unchanged), and `main()` in both files also opens a `tokenizer_config.json` that is not in the folder.
 - **Multi-token-prediction modules are not implemented** (DeepSeek V3, GLM-4.7, GLM-5 / 5.1 / 5.2, Step 3.5 Flash, MiniMax M2 / M2.5 / M2.7 / M3). They are only used for speculative decoding and training. **Vision and audio encoders are not implemented** for any model.
 - **MiniMax M3's indexer is computed densely**, so its memory grows quadratically with the sequence length. That is fine for reading and testing, but it is not a long-context kernel.
 - **Gemma 4 E2B / E4B demos are heavy:** their per-layer embedding tables add 2.4B / 2.8B parameters, so the full-size `main()` needs roughly 18 GB / 30 GB in fp32.
 - **Demos for large models need far more memory than typical hardware**: a model with hundreds of billions of parameters needs hundreds of GB to several TB in fp32. The parameter counts of these configs were checked on PyTorch's `meta` device instead.
+- **The older-layout files cannot load real Hugging Face weights unchanged.** Folders such as LLaMA 3 (8B / 70B), the Qwen dense models, Phi, Gemma 1, Nanbeige, Antares and Mistral Small 3.1 use an in-file `Rope` module with interleaved RoPE, whereas Hugging Face checkpoints are half-split, and the Qwen and LLaMA 3 files also give the feed-forward layers and the output head a bias that the real models do not have. The LLaMA 1 and LLaMA 2 files were rewritten and do not have these problems.
+- **Gemma 2 and Gemma 3 (1B) build a RoPE table inside every attention layer,** unlike the other Gemma files, which share two. For Gemma 3 (1B) that is about 1.7 GB of tables on top of 4 GB of parameters.
 - **Code style is not yet uniform across families.** Older folders (e.g. LLaMA 3, Qwen dense, Gemma 1, Phi) use a positional-argument attention constructor, an in-file `Rope` module and a `CustomDataset` helper; newer ones use `cfg`-dict constructors, `compute_rope_params` / `apply_rope`, one shared RoPE table per model, and read their `config.json` directly. Models within a family are near-duplicates that differ only in their config values.
 
 ## Roadmap
@@ -600,10 +602,10 @@ Issues already identified, listed so nobody is surprised:
 Planned work, roughly in priority order. Nothing below is implemented yet.
 
 - [ ] **Correctness:** add the logit-comparison scripts to the repository, plus weight-loading scripts and comparisons on real small checkpoints (e.g. Qwen2.5-0.5B, LLaMA 3.2 1B, Gemma 3 1B, OLMo 2/3 7B)
-- [ ] Verify or fix the older implementations listed under [known limitations](#known-limitations) (the Qwen dense models, OLMo, LLaMA 3, Gemma 1 / 2 / 3 1B, Phi)
+- [ ] Verify or fix the older implementations listed under [known limitations](#known-limitations) (Qwen3 0.6B, OLMo, LLaMA 3, Gemma 1 / 2, Phi, and loading real weights into the older-layout files)
 - [ ] **Implement the remaining 🚧 models**, prioritising new ideas over extra sizes: DeepSeek R1 / V3.2 / V4, Gemma 4 12B, Nemotron 3, MiMo, GLM-5.3-Flash, Sarvam 105B, Nanbeige 4.2, Muse Glimmer
 - [ ] Unify code style on the newer `cfg`-dict / `compute_rope_params` structure; share one implementation per family
-- [ ] KV-cache variants for the 39 implemented models that have none (Cohere, DeepSeek, GLM, Gemma, GPT-OSS, Laguna, LLaMA 4, OLMo 3, SmolLM3, Step, Sarvam, VibeThinker, Nanbeige, Antares, INTELLECT-3); sampling (temperature, top-k, top-p); chat templates
+- [ ] Rolling-buffer caches for the sliding-window layers; sampling (temperature, top-k, top-p); chat templates
 - [ ] Parameter-count and memory-estimate script (instantiate on the `meta` device to sanity-check configs)
 - [ ] Automated smoke tests and CI; `pyproject.toml` packaging
 - [ ] Architecture comparison tables (attention type, norm placement, positional encoding, dense vs. MoE)
