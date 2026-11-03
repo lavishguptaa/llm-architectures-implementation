@@ -301,7 +301,7 @@ class Model(nn.Module):
         
         self.out_norm_layer = RMSNorm(cfg["emb_dim"],eps=cfg["rms_norm_eps"])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"])
-        self.out_proj.weight = self.tok_emb.weight
+        # self.out_proj.weight = self.tok_emb.weight
         
     def forward(self,idx,cache=None,use_cache=False):
         # cache: list with one (K, V) pair per layer, from the previous forward call

@@ -127,7 +127,8 @@ class GroupedQueryAttention(nn.Module):
             dropout, d_in,
             d_out,
             rope_base,
-            bias_qkv, 
+            bias_qkv,
+            head_dim,
         ):
         
         
@@ -135,12 +136,13 @@ class GroupedQueryAttention(nn.Module):
         assert d_in % num_heads == 0, "d_in must be divisible by num_heads"
         
         self.num_heads = num_heads
-        self.head_dim = d_in // num_heads
+        # Qwen3 sets the head size in the config: it is not hidden_size / num_heads
+        self.head_dim = head_dim
         self.kv_head = kv_head
         
         self.d_out = d_out
         
-        self.W_q = nn.Linear(d_in, d_out, bias=bias_qkv)
+        self.W_q = nn.Linear(d_in, num_heads * self.head_dim, bias=bias_qkv)
         self.W_k = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         self.W_v = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         
@@ -152,7 +154,7 @@ class GroupedQueryAttention(nn.Module):
             self.head_dim
         )
         
-        self.out_proj = nn.Linear(d_in, d_out)
+        self.out_proj = nn.Linear(num_heads * self.head_dim, d_out, bias=bias_qkv)
         self.dropout = nn.Dropout(dropout)
         
         self.rope = Rope(
@@ -201,7 +203,7 @@ class GroupedQueryAttention(nn.Module):
         
         context_vector = context_vector.transpose(1, 2)
         
-        context_vector = context_vector.contiguous().view(batch_size,num_tokens,self.d_out)
+        context_vector = context_vector.contiguous().view(batch_size,num_tokens,self.num_heads * self.head_dim)
     
         context_vector = self.out_proj(context_vector)
         
@@ -261,6 +263,7 @@ class TransformerBlock(nn.Module):
             context_length = cfg['context_length'],
             dropout = cfg['dropout'],
             bias_qkv = cfg['bias_qkv'],
+            head_dim = cfg['head_dim'],
             rope_base = cfg['rope_theta']
         )
         
@@ -301,6 +304,8 @@ class Model(nn.Module):
         self.out_norm_layer = RMSNorm(cfg["emb_dim"])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"])
         self.dropout = nn.Dropout(cfg["dropout"])
+        self.out_proj.weight = self.tok_emb.weight
+        
         
     def forward(self,idx):
         batch_size,num_tokens = idx.shape
@@ -340,12 +345,13 @@ def generate_text_simple(model, idx, max_new_tokens, context_size):
     
 def main():
     cfg = {
-        "vocab_size": 151669,
+        "vocab_size": 151936,
         "emb_dim": 1024,
         "hidden_dim" : 3072,
         "context_length": 40960,
         "num_heads": 16,
         "kv_head": 8,
+        "head_dim": 128,
         "num_layers": 28,
         "dropout": 0.0,
         "bias_qkv": False,
