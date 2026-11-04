@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import json
 import math
 from tokenizers import Tokenizer
 from torch.utils.data import Dataset, DataLoader
@@ -186,7 +185,7 @@ class MultiHeadAttention(nn.Module):
         self.W_q = nn.Linear(d_in, d_out, bias=cfg["bias_qkv"])
         self.W_k = nn.Linear(d_in, d_out, bias=cfg["bias_qkv"])
         self.W_v = nn.Linear(d_in, d_out, bias=cfg["bias_qkv"])
-        self.out_proj = nn.Linear(d_out, d_out, bias=False)
+        self.out_proj = nn.Linear(d_out, d_out, bias=cfg["bias_qkv"])
 
         self.q_norm = RMSNorm(
             self.num_heads * self.head_dim,

@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import json
 from tokenizers import Tokenizer
 from torch.utils.data import Dataset, DataLoader
 
@@ -109,12 +108,12 @@ class MultiHeadAttention(nn.Module):
         self.q_norm = RMSNorm(d_out, cfg["rms_norm_eps"])
         self.k_norm = RMSNorm(d_out, cfg["rms_norm_eps"])
         
-        self.out_proj = nn.Linear(d_out, d_out, bias=False)
+        self.out_proj = nn.Linear(d_out, d_out, bias=cfg["bias_qkv"])
         self.attention_dropout_p = cfg["attention_dropout"]
         
         
-    def forward(self,x,cos,sin):
-        batch_size,num_tokens,d_in = x.shape
+    def forward(self, x, cos, sin):
+        batch_size, num_tokens, d_in = x.shape
         
         Q = self.W_q(x)
         K = self.W_k(x)
@@ -148,8 +147,7 @@ class MultiHeadAttention(nn.Module):
         
         return context_vector
     
-        
-        
+    
 class RMSNorm(nn.Module):
     def __init__(self, emb_dim, eps):
         super().__init__()
