@@ -43,76 +43,49 @@ def create_dataloader(data, tokenizer, context_size=256, stride=128,
     
     return dataloader
 
-class Rope(nn.Module):
+def compute_rope_params(head_dim, theta_base, context_length):
 
-    def __init__(self, head_dim, seq_len, theta):
-        super().__init__()
+    assert head_dim % 2 == 0, "head_dim must be even"
 
-        assert head_dim % 2 == 0, "head_dim must be even"
+    inv_freq = 1.0 / (
+        theta_base ** (torch.arange(0, head_dim, 2).float() / head_dim)
+    )
 
-        self.head_dim = head_dim
-        self.max_seq_length = seq_len
-        self.theta = theta
+    positions = torch.arange(context_length).float()
 
-        inv_freq = 1.0 / (theta ** (torch.arange(0, head_dim, 2).float() / head_dim))
+    angles = torch.outer(positions, inv_freq)
+    angles = torch.cat([angles, angles], dim=-1)
+
+    return torch.cos(angles), torch.sin(angles)
 
 
-        positions = torch.arange(seq_len, dtype=torch.float32)
+def apply_rope(x, cos, sin):
 
-        freqs = torch.outer(positions, inv_freq)
+    batch_size, num_heads, seq_len, head_dim = x.shape
 
-        self.register_buffer(
-                "cos_cached", 
-                freqs.cos(),
-                persistent=False
-        )
-        
-        self.register_buffer(
-                "sin_cached",
-                freqs.sin(),
-                persistent=False
-        )
+    cos = cos[:seq_len, :].to(x.device, dtype=x.dtype)
+    sin = sin[:seq_len, :].to(x.device, dtype=x.dtype)
 
-    def forward(self, x, position_ids=None):
-        seq_len = x.size(-2)
+    cos = cos.unsqueeze(0).unsqueeze(0)
+    sin = sin.unsqueeze(0).unsqueeze(0)
 
-        if position_ids is None:
-            position_ids = torch.arange(
-                seq_len,
-                device=x.device,
-            )
-        else:
-            position_ids = position_ids.to(x.device)
+    # Half-split pairing (dimension i with i + head_dim / 2)
+    x1 = x[..., :head_dim // 2]
+    x2 = x[..., head_dim // 2:]
 
-        if position_ids.max().item() >= self.max_seq_length:
-            raise ValueError(
-                f"Position {position_ids.max().item()} exceeds "
-                f"RoPE max_seq_len={self.max_seq_length}"
-            )
+    rotated = torch.cat([-x2, x1], dim=-1)
 
-        cos = self.cos_cached[position_ids]
-        sin = self.sin_cached[position_ids]
+    return (x * cos) + (rotated * sin)
 
-        x1 = x[..., ::2]
-        x2 = x[..., 1::2]
 
-        rotated_x1 = x1 * cos - x2 * sin
-        rotated_x2 = x1 * sin + x2 * cos
-
-        x_rotated = torch.stack((rotated_x1, rotated_x2), dim=-1).flatten(-2)
-
-        return x_rotated
-    
 class GroupedQueryAttention(nn.Module):
     def __init__(
             self,
             num_heads,
             kv_head, 
-            context_length,
             attention_dropout,
             d_in,
             d_out, 
-            rope_base,
             bias_qkv=True,
         ):
         
@@ -135,14 +108,7 @@ class GroupedQueryAttention(nn.Module):
         # Qwen2 puts a bias on the query / key / value projections (bias_qkv) and none on the output projection
         self.out_proj = nn.Linear(d_in, d_out,bias=False)
         
-        self.rope = Rope(
-            head_dim=self.head_dim,
-            seq_len=context_length,
-            theta=rope_base
-        )
-        
-        
-    def forward(self,x):
+    def forward(self,x,cos,sin):
         batch_size,num_tokens,d_in = x.shape
         
         Q = self.W_q(x)
@@ -157,8 +123,8 @@ class GroupedQueryAttention(nn.Module):
         K = K.transpose(1, 2)
         V = V.transpose(1, 2)
         
-        Q = self.rope(Q)
-        K = self.rope(K)
+        Q = apply_rope(Q, cos, sin)
+        K = apply_rope(K, cos, sin)
         
         
         context = F.scaled_dot_product_attention(
@@ -232,9 +198,7 @@ class TransformerBlock(nn.Module):
             kv_head = cfg['kv_head'],
             d_in = cfg['emb_dim'],
             d_out = cfg['emb_dim'],
-            context_length = cfg['context_length'],
             bias_qkv = cfg['bias_qkv'],
-            rope_base = cfg['rope_base'],
             attention_dropout=cfg["attention_dropout"]
         )
         
@@ -245,10 +209,10 @@ class TransformerBlock(nn.Module):
         
         self.resid_dropout = nn.Dropout(cfg["resid_dropout"])
         
-    def forward(self,x):
+    def forward(self,x,cos,sin):
         shortcut = x
         x = self.layer1(x)
-        x = self.attn(x)
+        x = self.attn(x,cos,sin)
         x = self.resid_dropout(x)
         x = x + shortcut
         
@@ -268,21 +232,36 @@ class Model(nn.Module):
         self.tok_emb = nn.Embedding(cfg["vocab_size"],cfg["emb_dim"])
         self.embd_dropout = nn.Dropout(cfg["embd_dropout"])
         
-        self.blocks = nn.Sequential(
-            *[TransformerBlock(cfg) for _ in range(cfg["num_layers"])]
+        self.blocks = nn.ModuleList(
+            [TransformerBlock(cfg) for _ in range(cfg["num_layers"])]
         )
         
         self.out_norm_layer = RMSNorm(cfg["emb_dim"],eps=cfg["rms_norm_eps"])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"])
         self.out_proj.weight = self.tok_emb.weight
+
+        # One RoPE table shared by every layer
+        head_dim = cfg["emb_dim"] // cfg["num_heads"]
+        cos, sin = compute_rope_params(
+            head_dim, cfg["rope_base"], cfg["context_length"]
+        )
+        self.register_buffer("cos", cos, persistent=False)
+        self.register_buffer("sin", sin, persistent=False)
         
     def forward(self,idx):
         batch_size,num_tokens = idx.shape
         
+        if num_tokens > self.cos.size(0):
+            raise ValueError(
+                f"Sequence length {num_tokens} exceeds "
+                f"context_length {self.cos.size(0)}"
+            )
+
         token_embedding = self.tok_emb(idx)
         x = self.embd_dropout(token_embedding)
         
-        x = self.blocks(x)
+        for block in self.blocks:
+            x = block(x, self.cos, self.sin)
         x = self.out_norm_layer(x)
         x = self.out_proj(x)
         return x
