@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import json
 from tokenizers import Tokenizer
 from torch.utils.data import Dataset, DataLoader
 
@@ -44,77 +43,53 @@ def create_dataloader(data, tokenizer, context_size=256, stride=128,
     return dataloader
 
 
-class Rope(nn.Module):
+def compute_rope_params(head_dim, theta_base, context_length):
 
-    def __init__(self, head_dim, seq_len, theta):
-        super().__init__()
+    assert head_dim % 2 == 0, "head_dim must be even"
 
-        assert head_dim % 2 == 0, "head_dim must be even"
+    inv_freq = 1.0 / (
+        theta_base ** (torch.arange(0, head_dim, 2).float() / head_dim)
+    )
 
-        self.head_dim = head_dim
-        self.max_seq_length = seq_len
-        self.theta = theta
+    positions = torch.arange(context_length).float()
 
-        inv_freq = 1.0 / (theta ** (torch.arange(0, head_dim, 2).float() / head_dim))
+    angles = torch.outer(positions, inv_freq)
+    angles = torch.cat([angles, angles], dim=-1)
+
+    return torch.cos(angles), torch.sin(angles)
 
 
-        positions = torch.arange(seq_len, dtype=torch.float32)
+def apply_rope(x, cos, sin, start_pos=0):
 
-        freqs = torch.outer(positions, inv_freq)
+    batch_size, num_heads, seq_len, head_dim = x.shape
 
-        self.register_buffer(
-                "cos_cached", 
-                freqs.cos(),
-                persistent=False
-        )
-        
-        self.register_buffer(
-                "sin_cached",
-                freqs.sin(),
-                persistent=False
-        )
+    # start_pos is the number of tokens already in the KV cache, so new
+    # tokens get their absolute positions instead of restarting at 0
+    cos = cos[start_pos:start_pos + seq_len, :].to(x.device, dtype=x.dtype)
+    sin = sin[start_pos:start_pos + seq_len, :].to(x.device, dtype=x.dtype)
 
-    def forward(self, x, position_ids=None):
-        seq_len = x.size(-2)
+    cos = cos.unsqueeze(0).unsqueeze(0)
+    sin = sin.unsqueeze(0).unsqueeze(0)
 
-        if position_ids is None:
-            position_ids = torch.arange(
-                seq_len,
-                device=x.device,
-            )
-        else:
-            position_ids = position_ids.to(x.device)
+    # Half-split pairing (dimension i with i + head_dim / 2)
+    x1 = x[..., :head_dim // 2]
+    x2 = x[..., head_dim // 2:]
 
-        if position_ids.max().item() >= self.max_seq_length:
-            raise ValueError(
-                f"Position {position_ids.max().item()} exceeds "
-                f"RoPE max_seq_len={self.max_seq_length}"
-            )
+    rotated = torch.cat([-x2, x1], dim=-1)
 
-        cos = self.cos_cached[position_ids]
-        sin = self.sin_cached[position_ids]
+    return (x * cos) + (rotated * sin)
 
-        x1 = x[..., ::2]
-        x2 = x[..., 1::2]
 
-        rotated_x1 = x1 * cos - x2 * sin
-        rotated_x2 = x1 * sin + x2 * cos
-
-        x_rotated = torch.stack((rotated_x1, rotated_x2), dim=-1).flatten(-2)
-
-        return x_rotated
-    
 class GroupedQueryAttention(nn.Module):
     def __init__(
             self,
             num_heads,
             kv_head, 
-            context_length,
             attention_dropout,
             d_in,
             d_out, 
-            rope_base,
-            bias_qkv=False,
+            bias_qkv,
+            attention_multiplier,
         ):
         
         super().__init__()
@@ -128,6 +103,9 @@ class GroupedQueryAttention(nn.Module):
         self.d_out = d_out
         
         self.attention_dropout = attention_dropout
+
+        # Granite does not use 1 / sqrt(head_dim): the softmax scale is a config value
+        self.scale = attention_multiplier
         
         self.W_q = nn.Linear(d_in, num_heads * self.head_dim, bias=bias_qkv)
         self.W_k = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
@@ -135,14 +113,7 @@ class GroupedQueryAttention(nn.Module):
         
         self.out_proj = nn.Linear(d_in, d_out,bias=bias_qkv)
         
-        self.rope = Rope(
-            head_dim=self.head_dim,
-            seq_len=context_length,
-            theta=rope_base
-        )
-        
-        
-    def forward(self,x,layer_cache=None):
+    def forward(self,x,cos,sin,layer_cache=None):
         # layer_cache: (K, V) from earlier steps, each [batch, kv_heads, past_len, head_dim].
         # Only the key/value heads are cached.
         batch_size,num_tokens,d_in = x.shape
@@ -161,10 +132,8 @@ class GroupedQueryAttention(nn.Module):
         K = K.transpose(1, 2)
         V = V.transpose(1, 2)
         
-        positions = torch.arange(past_len, past_len + num_tokens, device=x.device)
-
-        Q = self.rope(Q, positions)
-        K = self.rope(K, positions)
+        Q = apply_rope(Q, cos, sin, start_pos=past_len)
+        K = apply_rope(K, cos, sin, start_pos=past_len)
 
         # Keys are cached after RoPE, so they are never recomputed
         if layer_cache is not None:
@@ -198,6 +167,7 @@ class GroupedQueryAttention(nn.Module):
                     else 0.0
                 ),
             is_causal=is_causal,
+            scale=self.scale,
             enable_gqa=True,
         )
         
@@ -214,12 +184,12 @@ class GroupedQueryAttention(nn.Module):
     
 class FeedForward(nn.Module):
 
-    def __init__(self, emb_dim, hidden_dim):
+    def __init__(self, emb_dim, hidden_dim, bias):
         super().__init__()
 
-        self.gate_proj = nn.Linear(emb_dim, hidden_dim)
-        self.up_proj = nn.Linear(emb_dim, hidden_dim)
-        self.down_proj = nn.Linear(hidden_dim, emb_dim)
+        self.gate_proj = nn.Linear(emb_dim, hidden_dim, bias=bias)
+        self.up_proj = nn.Linear(emb_dim, hidden_dim, bias=bias)
+        self.down_proj = nn.Linear(hidden_dim, emb_dim, bias=bias)
 
     def forward(self, x):
         """Apply the gated feed-forward transformation."""
@@ -258,31 +228,33 @@ class TransformerBlock(nn.Module):
             kv_head = cfg['kv_head'],
             d_in = cfg['emb_dim'],
             d_out = cfg['emb_dim'],
-            context_length = cfg['context_length'],
             bias_qkv = cfg['bias_qkv'],
-            rope_base = cfg['rope_base'],
-            attention_dropout=cfg["attention_dropout"]
+            attention_dropout=cfg["attention_dropout"],
+            attention_multiplier = cfg["attention_multiplier"]
         )
         
         self.layer1 = RMSNorm(cfg['emb_dim'],eps=cfg["rms_norm_eps"])
         self.layer2 = RMSNorm(cfg['emb_dim'],eps=cfg["rms_norm_eps"])
         
-        self.ffn = FeedForward(cfg['emb_dim'],hidden_dim = cfg['intermediate_size'])
+        self.ffn = FeedForward(cfg['emb_dim'],hidden_dim = cfg['intermediate_size'],bias = cfg['mlp_bias'])
         
         self.resid_dropout = nn.Dropout(cfg["resid_dropout"])
+
+        # Each residual branch is scaled before it is added back
+        self.residual_multiplier = cfg["residual_multiplier"]
         
-    def forward(self,x,layer_cache=None):
+    def forward(self,x,cos,sin,layer_cache=None):
         shortcut = x
         x = self.layer1(x)
-        x, new_cache = self.attn(x, layer_cache)
+        x, new_cache = self.attn(x, cos, sin, layer_cache)
         x = self.resid_dropout(x)
-        x = x + shortcut
+        x = shortcut + x * self.residual_multiplier
         
         shortcut = x
         x = self.layer2(x)
         x = self.ffn(x)
         x = self.resid_dropout(x)
-        x = x + shortcut
+        x = shortcut + x * self.residual_multiplier
         
         return x, new_cache
     
@@ -299,25 +271,47 @@ class Model(nn.Module):
         )
         
         self.out_norm_layer = RMSNorm(cfg["emb_dim"],eps=cfg["rms_norm_eps"])
-        self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"])
+        self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
+
+        if cfg["tie_word_embeddings"]:
+            self.out_proj.weight = self.tok_emb.weight
+
+        # Granite scales the embeddings up and the logits down
+        self.embedding_multiplier = cfg["embedding_multiplier"]
+        self.logits_scaling = cfg["logits_scaling"]
+
+        # One RoPE table shared by every layer
+        head_dim = cfg["emb_dim"] // cfg["num_heads"]
+        cos, sin = compute_rope_params(
+            head_dim, cfg["rope_base"], cfg["context_length"]
+        )
+        self.register_buffer("cos", cos, persistent=False)
+        self.register_buffer("sin", sin, persistent=False)
         
     def forward(self,idx,cache=None,use_cache=False):
         # cache: list with one (K, V) pair per layer, from the previous forward call
         # use_cache=False returns logits only; use_cache=True returns (logits, cache)
         batch_size,num_tokens = idx.shape
-        
-        token_embedding = self.tok_emb(idx)
+
+        past_len = 0 if cache is None else cache[0][0].size(2)
+        if past_len + num_tokens > self.cos.size(0):
+            raise ValueError(
+                f"Sequence length {past_len + num_tokens} exceeds "
+                f"context_length {self.cos.size(0)}"
+            )
+
+        token_embedding = self.tok_emb(idx) * self.embedding_multiplier
         x = self.embd_dropout(token_embedding)
         
         new_cache = []
 
         for layer_idx, block in enumerate(self.blocks):
             layer_cache = None if cache is None else cache[layer_idx]
-            x, layer_cache = block(x, layer_cache)
+            x, layer_cache = block(x, self.cos, self.sin, layer_cache)
             new_cache.append(layer_cache)
 
         x = self.out_norm_layer(x)
-        x = self.out_proj(x)
+        x = self.out_proj(x) / self.logits_scaling
         if use_cache:
             return x, new_cache
         return x
@@ -364,6 +358,12 @@ def main():
         "bias_qkv": False,
         "rope_base": 10000000,
         "rms_norm_eps": 1e-5,
+        "embedding_multiplier": 12.0,
+        "attention_multiplier": 0.0078125,
+        "residual_multiplier": 0.22,
+        "logits_scaling": 8.0,
+        "tie_word_embeddings": True,
+        "mlp_bias": False,
     }
     
     torch.manual_seed(42)
