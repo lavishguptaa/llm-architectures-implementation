@@ -24,7 +24,7 @@ This repository is a growing library of decoder-only LLM architectures written i
 | `model_with_kv_cache.py` | The same model with a KV cache for faster generation (every model; see [Verification status](#verification-status)). It is a separate file: `model.py` is unchanged |
 | `config.json` | The model's official configuration, as published by its authors |
 | `tokenizer.json` | The model's Hugging Face tokenizer file, loaded with the `tokenizers` library |
-| `*.webp` / `*.png` | Architecture diagram (only some folders; in `assets/` for the Ai2, BOSS Zhipin and GLM models, next to `model.py` elsewhere) |
+| `assets/*.webp` / `assets/*.png` | Architecture diagram (only some folders) |
 
 The goal is to make the differences *between* architectures easy to see: the same building blocks (RoPE, RMSNorm, SwiGLU, GQA) recombined in different ways, plus the genuinely new ideas (sliding-window layer patterns, logit soft-capping, QK-norm, YaRN / `llama3` RoPE scaling, sparse Mixture-of-Experts routing).
 
@@ -90,7 +90,8 @@ Implemented families: **OLMo 2 / 3, Qwen 1.5 / 2.5 / 3 (dense and MoE), DeepSeek
     ├── model.py                 # (implemented models only)
     ├── config.json
     ├── tokenizer.json
-    └── <diagram>.webp           # (some models; under assets/ for Ai2, BOSS Zhipin, GLM)
+    └── assets/
+        └── <diagram>.webp / .png   # (some models)
 ```
 
 ## Quick start
