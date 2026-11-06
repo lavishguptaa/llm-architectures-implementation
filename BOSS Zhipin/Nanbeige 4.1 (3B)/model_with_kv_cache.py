@@ -89,14 +89,14 @@ class GroupedQueryAttention(nn.Module):
             attention_dropout,
             d_in,
             d_out, 
+            head_dim,
             bias_qkv=False,
         ):
         
         super().__init__()
-        assert d_in % num_heads == 0, "d_in must be divisible by num_heads"
         
         self.num_heads = num_heads
-        self.head_dim = d_in // num_heads
+        self.head_dim = head_dim
         self.kv_head = kv_head
         
         self.d_in = d_in
@@ -108,7 +108,7 @@ class GroupedQueryAttention(nn.Module):
         self.W_k = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         self.W_v = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         
-        self.out_proj = nn.Linear(d_in, d_out,bias=bias_qkv)
+        self.out_proj = nn.Linear(num_heads * self.head_dim, d_out, bias=bias_qkv)
         
     def forward(self,x,cos,sin,layer_cache=None):
         # layer_cache: (K, V) from earlier steps, each [batch, kv_heads, past_len, head_dim].
@@ -173,7 +173,7 @@ class GroupedQueryAttention(nn.Module):
         context = context.view(
             batch_size,
             num_tokens,
-            self.d_out,
+            self.num_heads * self.head_dim,
         )
 
 
@@ -184,9 +184,9 @@ class FeedForward(nn.Module):
     def __init__(self, emb_dim, hidden_dim):
         super().__init__()
 
-        self.gate_proj = nn.Linear(emb_dim, hidden_dim)
-        self.up_proj = nn.Linear(emb_dim, hidden_dim)
-        self.down_proj = nn.Linear(hidden_dim, emb_dim)
+        self.gate_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.up_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.down_proj = nn.Linear(hidden_dim, emb_dim, bias=False)
 
     def forward(self, x):
         """Apply the gated feed-forward transformation."""
@@ -226,6 +226,7 @@ class TransformerBlock(nn.Module):
             d_in = cfg['emb_dim'],
             d_out = cfg['emb_dim'],
             bias_qkv = cfg['bias_qkv'],
+            head_dim = cfg['head_dim'],
             attention_dropout=cfg["attention_dropout"]
         )
         
@@ -264,10 +265,10 @@ class Model(nn.Module):
         )
         
         self.out_norm_layer = RMSNorm(cfg["emb_dim"],eps=cfg["rms_norm_eps"])
-        self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"])
+        self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
 
         # One RoPE table shared by every layer
-        head_dim = cfg["emb_dim"] // cfg["num_heads"]
+        head_dim = cfg["head_dim"]
         cos, sin = compute_rope_params(
             head_dim, cfg["rope_base"], cfg["context_length"]
         )
@@ -336,6 +337,7 @@ def main():
         "intermediate_size" : 10496,
         "context_length": 262144,
         "num_heads": 20,
+        "head_dim": 128,
         "kv_head": 4,
         "num_layers": 32,
         "attention_dropout": 0.0,

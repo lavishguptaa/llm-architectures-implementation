@@ -216,9 +216,9 @@ class FeedForward(nn.Module):
     def __init__(self, emb_dim, hidden_dim=3072):
         super().__init__()
 
-        self.gate_proj = nn.Linear(emb_dim, hidden_dim)
-        self.up_proj = nn.Linear(emb_dim, hidden_dim)
-        self.down_proj = nn.Linear(hidden_dim, emb_dim)
+        self.gate_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.up_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.down_proj = nn.Linear(hidden_dim, emb_dim, bias=False)
 
     def forward(self, x):
 
@@ -281,7 +281,7 @@ class Model(nn.Module):
         )
         
         self.out_norm_layer = RMSNorm(cfg["emb_dim"])
-        self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"])
+        self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
         self.dropout = nn.Dropout(cfg["dropout"])
         self.out_proj.weight = self.tok_emb.weight
 

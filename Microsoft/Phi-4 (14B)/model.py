@@ -157,9 +157,9 @@ class FeedForward(nn.Module):
     def __init__(self, emb_dim, hidden_dim):
         super().__init__()
 
-        self.gate_proj = nn.Linear(emb_dim, hidden_dim)
-        self.up_proj = nn.Linear(emb_dim, hidden_dim)
-        self.down_proj = nn.Linear(hidden_dim, emb_dim)
+        self.gate_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.up_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.down_proj = nn.Linear(hidden_dim, emb_dim, bias=False)
 
     def forward(self, x):
         """Apply the gated feed-forward transformation."""
@@ -237,7 +237,7 @@ class Model(nn.Module):
         )
         
         self.out_norm_layer = RMSNorm(cfg["emb_dim"],eps=cfg["rms_norm_eps"])
-        self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"])
+        self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
 
         # One RoPE table shared by every layer
         head_dim = cfg["emb_dim"] // cfg["num_heads"]

@@ -87,16 +87,15 @@ class GroupedQueryAttention(nn.Module):
             d_in,
             d_out, 
             bias_qkv,  
-            head_dim=None,
+            head_dim,
             rms_norm_eps=1e-06,
         ):
         
         super().__init__()
-        assert d_in % num_heads == 0, "d_in must be divisible by num_heads"
         
         self.num_heads = num_heads
         # Qwen3 sets the head size in the config: it is not hidden_size / num_heads
-        self.head_dim = head_dim if head_dim is not None else d_in // num_heads
+        self.head_dim = head_dim
         self.kv_head = kv_head
         
         self.d_in = d_in
@@ -165,9 +164,9 @@ class FeedForward(nn.Module):
     def __init__(self, emb_dim, hidden_dim):
         super().__init__()
 
-        self.gate_proj = nn.Linear(emb_dim, hidden_dim)
-        self.up_proj = nn.Linear(emb_dim, hidden_dim)
-        self.down_proj = nn.Linear(hidden_dim, emb_dim)
+        self.gate_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.up_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.down_proj = nn.Linear(hidden_dim, emb_dim, bias=False)
 
     def forward(self, x):
         """Apply the gated feed-forward transformation."""
@@ -247,7 +246,7 @@ class Model(nn.Module):
         )
         
         self.out_norm_layer = RMSNorm(cfg["emb_dim"],eps=cfg["rms_norm_eps"])
-        self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"])
+        self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
         
         self.out_proj.weight = self.tok_emb.weight
 
