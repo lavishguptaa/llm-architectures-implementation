@@ -162,7 +162,7 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         """Apply the gated feed-forward transformation."""
-        gate = F.silu(self.gate_proj(x))
+        gate = F.gelu(self.gate_proj(x), approximate="tanh")
         value = self.up_proj(x)
 
         x = gate * value
@@ -170,24 +170,27 @@ class FeedForward(nn.Module):
         return self.down_proj(x)
     
 class RMSNorm(nn.Module):
+    # Gemma scales by (1 + weight), so the weight is zero-initialised
     def __init__(self, emb_dim, eps):
         super().__init__()
 
         self.eps = eps
 
-        self.weight = nn.Parameter(torch.ones(emb_dim))
+        self.weight = nn.Parameter(torch.zeros(emb_dim))
 
     def forward(self, x):
 
+        x_float = x.float()
+
         rms = torch.sqrt(
-            torch.mean(x ** 2, dim=-1, keepdim=True) + self.eps
+            torch.mean(x_float ** 2, dim=-1, keepdim=True) + self.eps
         )
 
+        x_float = x_float / rms
 
-        x = x / rms
+        return (x_float * (1.0 + self.weight.float())).to(x.dtype)
 
-        return x * self.weight
-    
+
 class TransformerBlock(nn.Module):  
     def __init__(self,cfg):
         super().__init__()
@@ -239,6 +242,12 @@ class Model(nn.Module):
         self.out_norm_layer = RMSNorm(cfg["emb_dim"],eps=cfg["rms_norm_eps"])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
 
+        if cfg["tie_word_embeddings"]:
+            self.out_proj.weight = self.tok_emb.weight
+
+        # Gemma scales the token embeddings by sqrt(emb_dim)
+        self.emb_scale = cfg["emb_dim"] ** 0.5
+
         # One RoPE table shared by every layer
         head_dim = cfg["head_dim"]
         cos, sin = compute_rope_params(
@@ -256,7 +265,7 @@ class Model(nn.Module):
                 f"context_length {self.cos.size(0)}"
             )
 
-        token_embedding = self.tok_emb(idx)
+        token_embedding = self.tok_emb(idx) * self.emb_scale
         x = self.embd_dropout(token_embedding)
         
         for block in self.blocks:
@@ -304,6 +313,7 @@ def main():
         "bias_qkv": False,
         "rope_base": 10000.0,
         "rms_norm_eps": 1e-06,
+        "tie_word_embeddings": True,
     }
     
     torch.manual_seed(42)

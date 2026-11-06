@@ -564,7 +564,7 @@ Being precise about what "implemented" means here:
 | Question | Answer today |
 |---|---|
 | Does each `model.py` build from its `cfg` and run a forward pass? | **Intended, but not exhaustively tested.** Every implemented model ships a `main()` demo that generates tokens with random weights, but the demos for the largest models cannot run on typical hardware (they allocate every parameter in fp32), and some demos have not been executed end to end. See [Known limitations](#known-limitations). |
-| Can pretrained weights be loaded? | **Not through code yet.** There is no weight-loading or checkpoint-conversion script. The files that use half-split RoPE have the same tensor layout as Hugging Face, so a Hugging Face state dict loads into them by renaming keys; this was tested with random Hugging Face weights for the dense Qwen, LLaMA 3, Nanbeige, Phi-4 and Mistral Small 3.1 models and for Cisco Antares. |
+| Can pretrained weights be loaded? | **Not through code yet.** There is no weight-loading or checkpoint-conversion script. The files that use half-split RoPE have the same tensor layout as Hugging Face, so a Hugging Face state dict loads into them by renaming keys; this was tested with random Hugging Face weights for the dense Qwen, LLaMA 3, Gemma 1, Nanbeige, Phi-4 and Mistral Small 3.1 models and for Cisco Antares. |
 | Have outputs been compared with a reference implementation? | **For the models listed below, yes; for the rest, no.** See [How the comparisons work](#how-the-comparisons-work). |
 | Are those comparison scripts in this repository? | **No.** They were run outside the repo and are not committed. There is no automated test suite or CI yet. |
 | Does inference use a KV cache or sampling? | **A KV cache for every implemented model (90 of 90), no sampling.** Each model has a separate `model_with_kv_cache.py`; generation is always greedy. |
@@ -606,7 +606,7 @@ Being precise about what "implemented" means here:
 | MiniMax M3 | `minimax_m3_vl` (text model) | From the `transformers` main branch; no released version includes it yet. |
 | Tiny Aya | `Cohere2` | |
 | North Mini Code, Command A+ | `Cohere2Moe` | From the `transformers` main branch; no released version includes it yet. |
-| Gemma 1 (2B / 7B) | `GemmaAttention` | **Attention only**, including its half-split RoPE (exact match with weights loaded by renaming). The rest of the model was not compared; see [Known limitations](#known-limitations). |
+| Gemma 1 (2B / 7B) | `Gemma` | GELU (tanh approximation) feed-forward, `1 + weight` RMSNorm, embeddings scaled by `sqrt(hidden_size)`, tied head and 256-dim heads read from the config. Whole model compared (logits agree to about 2e-6 relative); the state dict matches exactly and the full-size parameter counts equal `transformers`'. Gemma uses the tanh-approximate GELU, but the published `config.json` says `"gelu"` and `transformers` 5.5.4 then builds an exact GELU, which differs by about 3e-4 relative. |
 | Phi-4 (14B) | `Phi3` | Half-split RoPE. `Phi3` stores q/k/v and gate/up fused, so those weights are split when loading. The state dict matches exactly and the full-size parameter count equals `transformers`'. |
 | Phi-1 / Phi-1.5 | `PhiAttention` | **Attention only**, including its partial half-split RoPE (identical to about 1e-5 with weights loaded by renaming). The rest of the block was not compared; see [Known limitations](#known-limitations). |
 
@@ -631,7 +631,6 @@ Issues already identified, listed so nobody is surprised.
 
 - **Qwen3 (0.6B) ignores `cfg["hidden_dim"]`.** Its feed-forward width comes from a hard-coded default of 3072 (the real value), not from the config, so changing `hidden_dim` has no effect.
 - **Phi-1 / Phi-1.5 block layout.** Their RoPE matches (half-split, 32 of 64 dimensions), but the block is written as sequential pre-norm with two LayerNorms and no q/k/v bias. `PhiDecoderLayer` uses one shared LayerNorm with attention and the MLP in parallel (outputs added to the residual) and biased q/k/v projections. Not yet changed, so real Phi weights cannot be loaded.
-- **Gemma 1 (2B / 7B): RoPE matches, the rest of the model does not yet.** Their attention, including half-split RoPE and the config's 256-dimensional heads (read from `head_dim`, not derived), equals `transformers`' `GemmaAttention` (checked in isolation). The rest follows a plain Llama-style recipe instead of Gemma's: SiLU instead of GELU (tanh) in the feed-forward, RMSNorm without the `1 + weight` form, no `sqrt(emb_dim)` scaling of the embeddings, and an untied output head. Apart from the untied head, the full-size parameter counts equal `transformers`' exactly (2.51 B and 8.54 B). Not yet changed, so real Gemma weights cannot be loaded.
 - **OLMo 3 follows Ai2's design, not the installed `transformers` code, for RoPE.** These files use plain RoPE on the sliding-window layers and YaRN only on the full-attention layers. The installed `Olmo3Model` applies the same YaRN table to every layer, which contradicts a comment in its own source, so logits from the unpatched Hugging Face model differ from these files on the sliding layers. This was reasoned from that comment rather than checked against Ai2's original training code.
 
 ### Not implemented
@@ -658,9 +657,8 @@ Planned work, roughly in priority order. Nothing below is implemented yet.
 
 - [ ] **Correctness:** add the logit-comparison scripts to the repository, plus weight-loading scripts and comparisons on real small checkpoints (e.g. Qwen2.5-0.5B, LLaMA 3.2 1B, Gemma 3 1B, OLMo 2/3 7B)
 - [ ] Read Qwen3 (0.6B)'s feed-forward width from the config, and remove the remaining hard-coded constructor defaults (`bias_qkv`, norm epsilon)
-- [ ] Match Gemma 1's architecture (GELU feed-forward, `1 + weight` RMSNorm, embedding scaling, tied head) and compare it with `transformers`
 - [ ] Match the Phi-1 / Phi-1.5 block layout (shared LayerNorm, parallel attention and MLP, biased q/k/v) and compare them with `transformers`
-- [ ] Verify the remaining unchecked implementations (LLaMA 3.1 / 3.2, Gemma 1 / 2, GLM-4.5 / 4.5-Air / 4.7 folders)
+- [ ] Verify the remaining unchecked implementations (LLaMA 3.1 / 3.2, Gemma 2, GLM-4.5 / 4.5-Air / 4.7 folders)
 - [ ] **Implement the remaining 🚧 models**, prioritising new ideas over extra sizes: DeepSeek R1 / V3.2 / V4, Gemma 4 12B, Nemotron 3, MiMo, GLM-5.3-Flash, Sarvam 105B, Nanbeige 4.2, Muse Glimmer
 - [ ] Unify code style on the newer `cfg`-dict / `compute_rope_params` structure; share one implementation per family
 - [ ] Rolling-buffer caches for the sliding-window layers; sampling (temperature, top-k, top-p); chat templates
