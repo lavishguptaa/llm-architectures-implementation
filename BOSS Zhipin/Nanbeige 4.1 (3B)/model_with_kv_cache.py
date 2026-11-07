@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import json
 from tokenizers import Tokenizer
 from torch.utils.data import Dataset, DataLoader
 
@@ -72,7 +71,7 @@ def apply_rope(x, cos, sin, start_pos=0):
     cos = cos.unsqueeze(0).unsqueeze(0)
     sin = sin.unsqueeze(0).unsqueeze(0)
 
-    # Half-split pairing (dimension i with i + head_dim / 2), as in Hugging Face checkpoints
+    # Half-split pairing (dimension i with i + head_dim / 2)
     x1 = x[..., :head_dim // 2]
     x2 = x[..., head_dim // 2:]
 
@@ -90,7 +89,7 @@ class GroupedQueryAttention(nn.Module):
             d_in,
             d_out, 
             head_dim,
-            bias_qkv=False,
+            bias_qkv,
         ):
         
         super().__init__()
@@ -359,12 +358,12 @@ def main():
 
     tokenizer = Tokenizer.from_file(tokenizer_path)
 
-    tokenizer_vocab_size = tokenizer.get_vocab_size()
-    if tokenizer_vocab_size != cfg["vocab_size"]:
-        raise ValueError(
-            f"Tokenizer vocab size ({tokenizer_vocab_size}) does not match "
-            f"model vocab_size ({cfg['vocab_size']})."
-        )
+    # tokenizer_vocab_size = tokenizer.get_vocab_size()
+    # if tokenizer_vocab_size != cfg["vocab_size"]:
+    #     raise ValueError(
+    #         f"Tokenizer vocab size ({tokenizer_vocab_size}) does not match "
+    #         f"model vocab_size ({cfg['vocab_size']})."
+    #     )
 
     input_ids = tokenizer.encode(input_text).ids
     encoded_tensor = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0)

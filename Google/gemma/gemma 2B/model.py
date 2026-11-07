@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import json
 from tokenizers import Tokenizer
 from torch.utils.data import Dataset, DataLoader
 
@@ -87,7 +86,7 @@ class GroupedQueryAttention(nn.Module):
             d_in,
             d_out, 
             head_dim,
-            bias_qkv=False,
+            bias_qkv,
         ):
         
         super().__init__()
@@ -153,16 +152,22 @@ class GroupedQueryAttention(nn.Module):
     
 class FeedForward(nn.Module):
 
-    def __init__(self, emb_dim, hidden_dim):
+    def __init__(self, emb_dim, hidden_dim, activation):
         super().__init__()
 
         self.gate_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
         self.up_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
         self.down_proj = nn.Linear(hidden_dim, emb_dim, bias=False)
 
+        # Gemma uses the tanh-approximate GELU ("gelu_pytorch_tanh"); "gelu" selects the exact GELU
+        approximations = {"gelu_pytorch_tanh": "tanh", "gelu": "none"}
+        if activation not in approximations:
+            raise ValueError(f"Unsupported hidden_activation: {activation}")
+        self.gelu_approximation = approximations[activation]
+
     def forward(self, x):
         """Apply the gated feed-forward transformation."""
-        gate = F.gelu(self.gate_proj(x), approximate="tanh")
+        gate = F.gelu(self.gate_proj(x), approximate=self.gelu_approximation)
         value = self.up_proj(x)
 
         x = gate * value
@@ -208,7 +213,7 @@ class TransformerBlock(nn.Module):
         self.layer1 = RMSNorm(cfg['emb_dim'],eps=cfg["rms_norm_eps"])
         self.layer2 = RMSNorm(cfg['emb_dim'],eps=cfg["rms_norm_eps"])
         
-        self.ffn = FeedForward(cfg['emb_dim'],hidden_dim = cfg['intermediate_size'])
+        self.ffn = FeedForward(cfg['emb_dim'],hidden_dim = cfg['intermediate_size'],activation = cfg['hidden_activation'])
         
         self.resid_dropout = nn.Dropout(cfg["resid_dropout"])
         
@@ -314,6 +319,7 @@ def main():
         "rope_base": 10000.0,
         "rms_norm_eps": 1e-06,
         "tie_word_embeddings": True,
+        "hidden_activation": "gelu_pytorch_tanh",
     }
     
     torch.manual_seed(42)
