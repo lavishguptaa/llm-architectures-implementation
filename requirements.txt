@@ -3,5 +3,8 @@
 torch>=2.5
 # loads each model's tokenizer.json
 tokenizers
-# currently imported (but not used) by the Qwen3 (0.6B) and Mistral Small 3.1 model.py files
-numpy
+
+# Optional: only for the helper scripts in inference/, which work with real Hugging Face
+# models and are separate from the model.py files. Install them when you need those scripts:
+#   pip install huggingface_hub transformers
+# (jinja2, used by tokenizer_utilities/tokenizer_config.py, is installed together with torch.)
