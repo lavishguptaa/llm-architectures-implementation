@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import json
 from tokenizers import Tokenizer
 from torch.utils.data import Dataset, DataLoader
 
@@ -71,7 +70,7 @@ def apply_rope(x, cos, sin, start_pos=0):
     cos = cos.unsqueeze(0).unsqueeze(0)
     sin = sin.unsqueeze(0).unsqueeze(0)
 
-    # Half-split pairing (dimension i with i + head_dim / 2), as in Hugging Face checkpoints
+    # Half-split pairing (dimension i with i + head_dim / 2)
     x1 = x[..., :head_dim // 2]
     x2 = x[..., head_dim // 2:]
 
@@ -90,7 +89,7 @@ class GroupedQueryAttention(nn.Module):
             d_out, 
             bias_qkv,  
             head_dim,
-            rms_norm_eps=1e-06,
+            rms_norm_eps,
         ):
         
         super().__init__()

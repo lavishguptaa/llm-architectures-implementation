@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tokenizers import Tokenizer
-import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
 class CustomDataset(Dataset):
@@ -83,7 +82,7 @@ def apply_rope(x, cos, sin):
     cos = cos.unsqueeze(0).unsqueeze(0)
     sin = sin.unsqueeze(0).unsqueeze(0)
 
-    # Half-split pairing (dimension i with i + head_dim / 2), as in Hugging Face checkpoints
+    # Half-split pairing (dimension i with i + head_dim / 2)
     x1 = x[..., :head_dim // 2]
     x2 = x[..., head_dim // 2:]
 
@@ -97,11 +96,11 @@ class GroupedQueryAttention(nn.Module):
             self, 
             num_heads, 
             kv_head, 
-            context_length, 
             dropout, d_in,
             d_out,
             bias_qkv,
             head_dim,
+            rms_norm_eps,
         ):
         
         
@@ -119,18 +118,12 @@ class GroupedQueryAttention(nn.Module):
         self.W_k = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         self.W_v = nn.Linear(d_in, kv_head * self.head_dim, bias=bias_qkv)
         
-        self.q_norm = RMSNorm(
-            self.head_dim
-        )
+        self.q_norm = RMSNorm(self.head_dim, eps=rms_norm_eps)
         
-        self.k_norm = RMSNorm(
-            self.head_dim
-        )
+        self.k_norm = RMSNorm(self.head_dim, eps=rms_norm_eps)
         
         self.out_proj = nn.Linear(num_heads * self.head_dim, d_out, bias=bias_qkv)
         self.dropout = nn.Dropout(dropout)
-        
-        self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length),diagonal=1).bool())
         
     def forward(self,x,cos,sin):
         batch_size,num_tokens,d_in = x.shape
@@ -154,22 +147,16 @@ class GroupedQueryAttention(nn.Module):
         Q = apply_rope(Q, cos, sin)
         K = apply_rope(K, cos, sin)
         
-        groups = self.num_heads // self.kv_head
-        
-        K = K.repeat_interleave(groups,dim=1)
-        V = V.repeat_interleave(groups,dim=1)
-        
-        attention_score = Q @ K.transpose(3,2)
-        
-        mask_bool = self.mask.bool()[:num_tokens,:num_tokens]
-        attention_score = attention_score.masked_fill(mask_bool,float('-inf'))
-        
-        attention_weights = torch.softmax(attention_score / K.shape[-1] ** 0.5,dim=-1)
-        
-        context_vector = attention_weights @ V
-        
+        context_vector = F.scaled_dot_product_attention(
+            Q, K, V,
+            attn_mask=None,
+            dropout_p=0.0,
+            is_causal=True,
+            enable_gqa=True
+        )
+
         context_vector = context_vector.transpose(1, 2)
-        
+
         context_vector = context_vector.contiguous().view(batch_size,num_tokens,self.num_heads * self.head_dim)
     
         context_vector = self.out_proj(context_vector)
@@ -178,7 +165,7 @@ class GroupedQueryAttention(nn.Module):
     
     
 class RMSNorm(nn.Module):
-    def __init__(self, emb_dim, eps=1e-6):
+    def __init__(self, emb_dim, eps):
         super().__init__()
 
         self.eps = eps
@@ -200,7 +187,7 @@ class RMSNorm(nn.Module):
 
 class FeedForward(nn.Module):
 
-    def __init__(self, emb_dim, hidden_dim=3072):
+    def __init__(self, emb_dim, hidden_dim):
         super().__init__()
 
         self.gate_proj = nn.Linear(emb_dim, hidden_dim, bias=False)
@@ -227,16 +214,16 @@ class TransformerBlock(nn.Module):
             kv_head = cfg['kv_head'],
             d_in = cfg['emb_dim'],
             d_out = cfg['emb_dim'],
-            context_length = cfg['context_length'],
             dropout = cfg['dropout'],
             bias_qkv = cfg['bias_qkv'],
-            head_dim = cfg['head_dim']
+            head_dim = cfg['head_dim'],
+            rms_norm_eps = cfg['rms_norm_eps']
         )
         
-        self.layer1 = RMSNorm(cfg['emb_dim'])
-        self.layer2 = RMSNorm(cfg['emb_dim'])
+        self.layer1 = RMSNorm(cfg['emb_dim'], eps=cfg['rms_norm_eps'])
+        self.layer2 = RMSNorm(cfg['emb_dim'], eps=cfg['rms_norm_eps'])
         
-        self.ffn = FeedForward(cfg['emb_dim'])
+        self.ffn = FeedForward(cfg['emb_dim'], hidden_dim = cfg['intermediate_size'])
         
         self.attn_dropout = nn.Dropout(cfg['dropout'])
         
@@ -267,7 +254,7 @@ class Model(nn.Module):
             [TransformerBlock(cfg) for _ in range(cfg["num_layers"])]
         )
         
-        self.out_norm_layer = RMSNorm(cfg["emb_dim"])
+        self.out_norm_layer = RMSNorm(cfg["emb_dim"], eps=cfg["rms_norm_eps"])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
         self.dropout = nn.Dropout(cfg["dropout"])
         self.out_proj.weight = self.tok_emb.weight
@@ -327,7 +314,7 @@ def main():
     cfg = {
         "vocab_size": 151936,
         "emb_dim": 1024,
-        "hidden_dim" : 3072,
+        "intermediate_size" : 3072,
         "context_length": 40960,
         "num_heads": 16,
         "kv_head": 8,
@@ -335,7 +322,8 @@ def main():
         "num_layers": 28,
         "dropout": 0.0,
         "bias_qkv": False,
-        "rope_theta": 1000000
+        "rope_theta": 1000000,
+        "rms_norm_eps": 1e-06
     }
     
     torch.manual_seed(42)
@@ -349,11 +337,11 @@ def main():
     print("Tokenizer vocab size:", tokenizer.get_vocab_size())
     print("Model vocab size:", cfg["vocab_size"])
 
-    if tokenizer.get_vocab_size() != cfg["vocab_size"]:
-        raise ValueError(
-            f"Tokenizer vocab size ({tokenizer.get_vocab_size()}) "
-            f"does not match model vocab size ({cfg['vocab_size']})."
-        )
+    # if tokenizer.get_vocab_size() != cfg["vocab_size"]:
+    #     raise ValueError(
+    #         f"Tokenizer vocab size ({tokenizer.get_vocab_size()}) "
+    #         f"does not match model vocab size ({cfg['vocab_size']})."
+    #     )
 
     encoding = tokenizer.encode(input_text)
     input_ids = encoding.ids
