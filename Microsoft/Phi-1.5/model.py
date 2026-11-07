@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import json
 from tokenizers import Tokenizer
 from torch.utils.data import Dataset, DataLoader
 
@@ -45,7 +44,7 @@ def create_dataloader(data, tokenizer, context_size=256, stride=128,
 
 
 class LayerNorm(nn.Module):
-    def __init__(self, emb_dim, eps=1e-5):
+    def __init__(self, emb_dim, eps):
         super().__init__()
 
         self.eps = eps
@@ -106,7 +105,7 @@ def apply_rope(x, cos, sin):
 
 class MultiHeadAttention(nn.Module):
     
-    def __init__(self,num_heads,d_in,d_out,context_length,attention_dropout,bias_qkv=False):
+    def __init__(self,num_heads,d_in,d_out,context_length,attention_dropout,bias_qkv):
         super().__init__()
         
         assert d_in % num_heads == 0, "d_in must be divisible by num_heads"
@@ -192,27 +191,16 @@ class TransformerBlock(nn.Module):
             cfg["emb_dim"],
             cfg["layer_norm_eps"]
         )
-
-        self.layer2 = LayerNorm(
-            cfg["emb_dim"],
-            cfg["layer_norm_eps"]
-        )
         
         self.ffn = FeedForward(cfg['emb_dim'],cfg['intermediate_size'])
         
         
     def forward(self,x,cos,sin):
+        # Parallel block: attention and the feed-forward read the same normalised input,
+        # and both outputs are added to the residual stream.
         shortcut = x
         x = self.layer1(x)
-        x = self.attn(x,cos,sin)
-        x = x + shortcut
-        
-        shortcut = x
-        x = self.layer2(x)
-        x = self.ffn(x)
-        x = x + shortcut
-        
-        return x
+        return shortcut + self.attn(x,cos,sin) + self.ffn(x)
     
     
 class Model(nn.Module):
@@ -292,7 +280,7 @@ def main():
         "context_length": 2048,
         "num_heads": 32,
         "num_layers": 24,
-        "bias_qkv": False,
+        "bias_qkv": True,       # PhiAttention always puts a bias on the q / k / v projections
         "layer_norm_eps": 1e-5,
         "attention_dropout": 0.0,
         "rope_theta": 10000.0,

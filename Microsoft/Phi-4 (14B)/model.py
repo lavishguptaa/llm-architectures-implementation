@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import json
 from tokenizers import Tokenizer
 from torch.utils.data import Dataset, DataLoader
 
@@ -87,7 +86,7 @@ class GroupedQueryAttention(nn.Module):
             attention_dropout,
             d_in,
             d_out, 
-            bias_qkv=False,
+            bias_qkv,
         ):
         
         super().__init__()
