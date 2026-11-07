@@ -627,12 +627,12 @@ def generate_text_simple(model, idx, max_new_tokens, context_size):
 
 
 def main():
-    # Values come from this folder's params.json (Mistral's native format)
+    # Values come from this folder's config.json (Mistral's native format, not the Hugging Face layout)
     cfg = {
             "vocab_size": 131072,
             "emb_dim": 7168,
-            "hidden_dim": 4096,             # params.json moe.expert_hidden_dim
-            "dense_hidden_dim": 16384,      # params.json hidden_dim: MLP size of the dense layers
+            "hidden_dim": 4096,             # config.json moe.expert_hidden_dim
+            "dense_hidden_dim": 16384,      # config.json hidden_dim: MLP size of the dense layers
             "first_k_dense_replace": 3,
             "context_length": 294912,
             "num_heads": 128,

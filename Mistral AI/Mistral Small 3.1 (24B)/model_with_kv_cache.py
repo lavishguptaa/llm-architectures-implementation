@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import json
 from tokenizers import Tokenizer
-import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
 class CustomDataset(Dataset):
@@ -101,11 +99,10 @@ class GroupedQueryAttention(nn.Module):
             self, 
             num_heads, 
             kv_head, 
-            context_length, 
             dropout, d_in,
             d_out,
             head_dim,
-            bias_qkv=False
+            bias_qkv
         ):
         
         super().__init__()
@@ -125,8 +122,6 @@ class GroupedQueryAttention(nn.Module):
         
         self.out_proj = nn.Linear(num_heads * self.head_dim, d_out, bias=bias_qkv)
         self.dropout = nn.Dropout(dropout)
-        
-        self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length),diagonal=1).bool())
         
     def forward(self,x,cos,sin,layer_cache=None):
         # layer_cache: (K, V) from earlier steps, each [batch, kv_heads, past_len, head_dim].
@@ -157,22 +152,29 @@ class GroupedQueryAttention(nn.Module):
 
         new_cache = (K, V)
         
-        groups = self.num_heads // self.kv_head
-        
-        K = K.repeat_interleave(groups,dim=1)
-        V = V.repeat_interleave(groups,dim=1)
-        
-        attention_score = Q @ K.transpose(3,2)
-        
-        mask_bool = self.mask.bool()[past_len:past_len + num_tokens, :past_len + num_tokens]
-        attention_score = attention_score.masked_fill(mask_bool,float('-inf'))
-        
-        attention_weights = torch.softmax(attention_score / K.shape[-1] ** 0.5,dim=-1)
-        
-        context_vector = attention_weights @ V
-        
+        # With a cache the queries are only the new tokens but the keys cover the whole
+        # sequence, so the built-in causal mask (aligned to the top-left) would be wrong.
+        attn_mask = None
+        is_causal = True
+
+        if past_len > 0:
+            is_causal = False
+
+            if num_tokens > 1:
+                q_pos = torch.arange(past_len, past_len + num_tokens, device=x.device)[:, None]
+                k_pos = torch.arange(past_len + num_tokens, device=x.device)[None, :]
+                attn_mask = k_pos <= q_pos
+
+        context_vector = F.scaled_dot_product_attention(
+            Q, K, V,
+            attn_mask=attn_mask,
+            dropout_p=0.0,
+            is_causal=is_causal,
+            enable_gqa=True
+        )
+
         context_vector = context_vector.transpose(1, 2)
-        
+
         context_vector = context_vector.contiguous().view(batch_size,num_tokens,self.num_heads * self.head_dim)
     
         context_vector = self.out_proj(context_vector)
@@ -181,7 +183,7 @@ class GroupedQueryAttention(nn.Module):
     
     
 class RMSNorm(nn.Module):
-    def __init__(self, emb_dim, eps=1e-5):
+    def __init__(self, emb_dim, eps):
         super().__init__()
 
         self.eps = eps
@@ -230,13 +232,12 @@ class TransformerBlock(nn.Module):
             d_in = cfg['emb_dim'],
             d_out = cfg['emb_dim'],
             head_dim = cfg['head_dim'],
-            context_length = cfg['context_length'],
             dropout = cfg['dropout'],
             bias_qkv = cfg['bias_qkv']
         )
         
-        self.layer1 = RMSNorm(cfg['emb_dim'])
-        self.layer2 = RMSNorm(cfg['emb_dim'])
+        self.layer1 = RMSNorm(cfg['emb_dim'], eps=cfg['rms_norm_eps'])
+        self.layer2 = RMSNorm(cfg['emb_dim'], eps=cfg['rms_norm_eps'])
         
         self.ffn = FeedForward(cfg['emb_dim'],cfg['hidden_dim'])
         
@@ -269,7 +270,7 @@ class Model(nn.Module):
             [TransformerBlock(cfg) for _ in range(cfg["num_layers"])]
         )
         
-        self.out_norm_layer = RMSNorm(cfg["emb_dim"])
+        self.out_norm_layer = RMSNorm(cfg["emb_dim"], eps=cfg["rms_norm_eps"])
         self.out_proj = nn.Linear(cfg["emb_dim"],cfg["vocab_size"],bias=False)
 
         # One RoPE table shared by every layer
@@ -350,7 +351,8 @@ def main():
         "num_layers": 40,
         "dropout": 0.1,
         "bias_qkv": False,
-        "rope_theta": 1000000000.0
+        "rope_theta": 1000000000.0,
+        "rms_norm_eps": 1e-05
     }
     
     torch.manual_seed(42)
