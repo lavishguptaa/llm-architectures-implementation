@@ -627,7 +627,7 @@ Being precise about what "implemented" means here:
 | Question | Answer today |
 |---|---|
 | Does each `model.py` build from its `cfg` and run a forward pass? | **Intended, but not exhaustively tested.** Every implemented model ships a `main()` demo that generates tokens with random weights, but the demos for the largest models cannot run on typical hardware (they allocate every parameter in fp32), and some demos have not been executed end to end. See [Known limitations](#known-limitations). |
-| Can pretrained weights be loaded? | **Not through code yet.** There is no weight-loading or checkpoint-conversion script. The files that use half-split RoPE have the same tensor layout as Hugging Face, so a Hugging Face state dict loads into them by renaming keys; this was tested with random Hugging Face weights for the dense Qwen, LLaMA 3, Gemma 1, Nanbeige, Phi-1 / 1.5 / 4 and Mistral Small 3.1 models and for Cisco Antares. |
+| Can pretrained weights be loaded? | **Not through code yet.** There is no weight-loading or checkpoint-conversion script. The files that use half-split RoPE have the same tensor layout as Hugging Face, so a Hugging Face state dict loads into them by renaming keys; this was tested with random Hugging Face weights for the dense Qwen, LLaMA 3 / 3.1 / 3.2, Gemma 1 / 2, Nanbeige, Phi-1 / 1.5 / 4, Mistral Small 3.1 and GLM-4.x models and for Cisco Antares (`Glm4Moe` stores its experts stacked, so those tensors must be split per expert). |
 | Have outputs been compared with a reference implementation? | **For the models listed below, yes; for the rest, no.** See [How the comparisons work](#how-the-comparisons-work). |
 | Are those comparison scripts in this repository? | **No.** They were run outside the repo and are not committed. There is no automated test suite or CI yet. |
 | Does inference use a KV cache or sampling? | **A KV cache for every implemented model (90 of 90), no sampling.** Each model has a separate `model_with_kv_cache.py`; generation is always greedy. |
@@ -645,6 +645,7 @@ Being precise about what "implemented" means here:
 | LLaMA 1 (7B / 13B / 30B / 65B), LLaMA 2 (7B / 13B / 70B) | `Llama` | |
 | Nanbeige 4.1 (3B) | `Llama` | Half-split RoPE, so weights load by renaming alone. The state dict matches exactly and the full-size parameter count equals `transformers`'. |
 | LLaMA 3 (8B / 70B) | `Llama` | Half-split RoPE, so weights load by renaming alone. The state dict matches exactly and the full-size parameter counts equal `transformers`'. |
+| LLaMA 3.1 (8B / 70B / 405B), LLaMA 3.2 (1B / 3B) | `Llama` | Half-split RoPE with `llama3` frequency scaling (the scaling is shrunk in the test so that it takes effect; switching it off breaks the comparison). LLaMA 3.2 ties the head and reads `head_dim` from the config. The state dict matches exactly and the full-size parameter counts equal `transformers`'. |
 | Qwen1.5 dense (0.5B – 110B), Qwen2.5 dense (0.5B – 72B) | `Qwen2` | Half-split RoPE, so weights load by renaming alone. The q/k/v biases that `Qwen2` really has are kept; the state dict matches exactly and the full-size parameter counts equal `transformers`'. |
 | VibeThinker-3B | `Qwen2` | |
 | Qwen1.5 14B-A2.7B | `Qwen2Moe` | |
@@ -654,6 +655,7 @@ Being precise about what "implemented" means here:
 | OLMo 3 (7B / 32B) | `Olmo3` | Plain RoPE on the sliding-window layers and YaRN-scaled RoPE only on the full-attention layers, as in Ai2's own OLMo-core (`with_rope_scaling(..., full_attn_layers_only=True)`) and in current `transformers` main, which builds one RoPE table per layer type. The installed `transformers` 5.5.4 still gives YaRN to every layer, so the reference was patched to use plain RoPE on the sliding layers. |
 | Cisco Antares (1B) | `GraniteMoeHybrid` | Real Granite multipliers (embeddings ×12, attention scale 1/128, residual ×0.22, logits ÷8) and tied embeddings; logits agree to about 2e-7. |
 | Granite 4.1 (3B / 8B / 30B) | `Granite` | |
+| Gemma 2 (2B / 9B / 27B) | `Gemma2` | Soft-capping of the attention and final logits, alternating sliding-window / full layers, four norms per block, and a query scale that differs from the head size (each switched off in turn breaks the comparison). Compared against `transformers`' **eager** attention, because its default SDPA path ignores attention soft-capping. The state dict matches exactly and the full-size parameter counts equal `transformers`'. |
 | Gemma 3 (270M / 1B / 4B / 12B / 27B) | `Gemma3` | |
 | Gemma 4 (31B / E2B / E4B) | `Gemma4` | Text model only. |
 | GPT-OSS (20B / 120B) | `GptOss` | |
@@ -664,6 +666,7 @@ Being precise about what "implemented" means here:
 | Mistral Large 3 | `Mistral4` and DeepSeek-V2 code | Large 3 has no `transformers` implementation. |
 | DeepSeek V2, V3 | `transformers` DeepSeek code | |
 | GLM-5 / 5.1 / 5.2 | `glm_moe_dsa` (newest source) | The released 5.5.x versions predate its indexer sharing and use a different RoPE pairing, so the `transformers` main branch was used. |
+| GLM-4.5, GLM-4.5-Air, GLM-4.7 | `Glm4Moe` | Partial half-split RoPE, optional QK-norm, sigmoid routing with an expert-selection bias (also with grouped routing), a shared expert and dense first layers; the selection bias and the partial rotary factor are each shown to matter. `Glm4Moe` stores the routed experts stacked in single tensors, so they are split per expert when loading. Full-size parameter counts equal `transformers`'. |
 | INTELLECT-3 | `Glm4Moe` | Shares its code with GLM-4.5-Air. |
 | MiniMax M2 / M2.5 / M2.7 | `MiniMaxM2` | Partial-rotary factor set to `rotary_dim / head_dim`, as in MiniMax's official config. |
 | MiniMax M3 | `minimax_m3_vl` (text model) | From the `transformers` main branch; no released version includes it yet. |
@@ -684,7 +687,7 @@ Step 3.5 Flash, Sarvam 30B, Laguna XS.2 and Laguna XS 2.1 were compared with the
 
 ### Not compared against any reference
 
-LLaMA 3.1 / 3.2, Gemma 2, and the GLM-4.5 / 4.5-Air / 4.7 folders themselves. For LLaMA 3.1 / 3.2 the `llama3`-scaled RoPE tables were checked against `transformers`' own initialisation, but logits were not compared. Treat these as faithful *attempts* at the published architectures until logit-level verification is added.
+None: every implemented model has now been compared with a reference implementation (the tables above). All comparisons use random weights on small models plus exact full-size parameter counts; no pretrained checkpoint has been loaded yet.
 
 ## Known limitations
 
@@ -692,7 +695,7 @@ Issues already identified, listed so nobody is surprised.
 
 ### Correctness gaps
 
-- **Models not yet compared with a reference.** LLaMA 3.1 / 3.2 (logits), Gemma 2 and the GLM-4.5 / 4.5-Air / 4.7 folders have not been compared with a reference implementation; see [Not compared against any reference](#not-compared-against-any-reference).
+- **No real-checkpoint testing.** Every comparison uses random weights; no pretrained checkpoint has been loaded and compared on real text, so a bug that only shows up with trained weights (for example a mis-named tensor in a conversion step) would not have been caught.
 
 ### Not implemented
 
@@ -716,7 +719,6 @@ Issues already identified, listed so nobody is surprised.
 Planned work, roughly in priority order. Nothing below is implemented yet.
 
 - [ ] **Correctness:** add the logit-comparison scripts to the repository, plus weight-loading scripts and comparisons on real small checkpoints (e.g. Qwen2.5-0.5B, LLaMA 3.2 1B, Gemma 3 1B, OLMo 2/3 7B)
-- [ ] Verify the remaining unchecked implementations (LLaMA 3.1 / 3.2, Gemma 2, GLM-4.5 / 4.5-Air / 4.7 folders)
 - [ ] **Implement the remaining 🚧 models**, prioritising new ideas over extra sizes: DeepSeek R1 / V3.2 / V4, Gemma 4 12B, Nemotron 3, MiMo, GLM-5.3-Flash, Sarvam 105B, Nanbeige 4.2, Muse Glimmer
 - [ ] Unify code style on the newer `cfg`-dict / `compute_rope_params` structure; share one implementation per family
 - [ ] Rolling-buffer caches for the sliding-window layers; sampling (temperature, top-k, top-p); chat templates
