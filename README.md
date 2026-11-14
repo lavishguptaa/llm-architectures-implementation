@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.5%2B-ee4c2c)
-![Models implemented](https://img.shields.io/badge/models%20implemented-90-brightgreen)
+![Models implemented](https://img.shields.io/badge/models%20implemented-96-brightgreen)
 ![Status](https://img.shields.io/badge/status-work%20in%20progress-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -35,22 +35,22 @@ The goal is to make the differences *between* architectures easy to see: the sam
 
 | | Count |
 |---|---|
-| ✅ Models with a `model.py` implementation | **90** |
-| ⚡ Of those, models that also have a `model_with_kv_cache.py` | **90** (all of them) |
-| 🚧 Models with only a `config.json` and a tokenizer file (implementation pending) | **31** |
+| ✅ Models with a `model.py` implementation | **96** |
+| ⚡ Of those, models that also have a `model_with_kv_cache.py` | **96** (all of them) |
+| 🚧 Models with only a `config.json` and a tokenizer file (implementation pending) | **25** |
 | Standalone attention-mechanism implementations | **10** files |
 
-Implemented families: **OLMo 2 / 3, Qwen 1.5 / 2.5 / 3 (dense and MoE), DeepSeek V2 / V3, Nanbeige 4.1, Cisco Antares, GLM-4.5 / 4.5-Air / 4.7 / 5 / 5.1 / 5.2, INTELLECT-3, Step 3.5 Flash, Sarvam 30B, Laguna XS.2 / XS 2.1 / S 2.1, GPT-OSS 20B / 120B, Gemma 1 / 2 / 3 (including 270M) / 4 (31B, E2B, E4B), Granite 4.1, LLaMA 1 / 2 / 3 / 3.1 / 3.2 / 4 Maverick, Phi-1 / 1.5 / 4, Mistral Small 3.1 / 4 and Mistral Large 3, SmolLM3, MiniMax M2 / M2.5 / M2.7 / M3, Cohere Tiny Aya / North Mini Code / Command A+, VibeThinker-3B.**
+Implemented families: **OLMo 2 / 3, Qwen 1.5 / 2.5 / 3 (dense and MoE), DeepSeek V2 / V3, Nanbeige 4.1, Cisco Antares, GLM-4.5 / 4.5-Air / 4.7 / 5 / 5.1 / 5.2, INTELLECT-3, Step 3.5 Flash, Sarvam 30B, Laguna XS.2 / XS 2.1 / S 2.1, GPT-OSS 20B / 120B, Gemma 1 / 2 / 3 (including 270M) / 4 (31B, E2B, E4B), Granite 4.1, LLaMA 1 / 2 / 3 / 3.1 / 3.2 / 4 Maverick, Phi-1 / 1.5 / 4, Mistral Small 3.1 / 4 and Mistral Large 3, SmolLM3, MiniMax M2 / M2.5 / M2.7 / M3, Xiaomi MiMo-V2 / V2.5 / V2.6 (Flash and Pro), Reflection Beam, Cohere Tiny Aya / North Mini Code / Command A+, VibeThinker-3B.**
 
 ## Highlights
 
 - **One file per model.** Open a folder, read `model.py` top to bottom, and you have the whole architecture — no framework indirection, no inheritance maze.
 - **Configuration-driven.** Each model is built from a plain `cfg` dictionary that mirrors the official `config.json` keys, so adapting a model to a new size is a config change.
 - **Architectural features covered**
-  - Positional encoding: RoPE (half-split and interleaved pairing), `llama3` frequency scaling (LLaMA 3.1 / 3.2, Step 3.5 Flash), YaRN (OLMo 3, DeepSeek, Mistral Small 4 / Large 3, GPT-OSS, Laguna), "proportional" RoPE that rotates only a fraction of each head (Gemma 4), partial rotary embeddings (GLM-4.x, Step, Laguna, MiniMax), per-layer-type RoPE settings (Gemma 3, Step, Laguna), layers with no positional encoding at all (LLaMA 4, SmolLM3, Cohere)
-  - Attention: MHA, GQA, **multi-head latent attention** (DeepSeek, GLM-5, Mistral Small 4 / Large 3), **DeepSeek Sparse Attention** with a lightning indexer and cross-layer indexer sharing (GLM-5 / 5.1 / 5.2), sliding-window and chunked-attention layer patterns (Gemma 2/3, OLMo 3, GPT-OSS, Step, Laguna, LLaMA 4), per-head attention sinks (GPT-OSS), per-head output gates (Step, Laguna), per-layer head counts, **block-sparse attention** with a key-block indexer (MiniMax M3), **shared KV layers** and keys-as-values (Gemma 4), per-layer input embeddings (Gemma 4 E2B / E4B), QK-norm (per head, or over the whole projection in MiniMax), attention-logit and final-logit soft-capping (Gemma 2), position-dependent query scaling (LLaMA 4, Mistral Small 4 / Large 3)
+  - Positional encoding: RoPE (half-split and interleaved pairing), `llama3` frequency scaling (LLaMA 3.1 / 3.2, Step 3.5 Flash), YaRN (OLMo 3, DeepSeek, Mistral Small 4 / Large 3, GPT-OSS, Laguna), "proportional" RoPE that rotates only a fraction of each head (Gemma 4), partial rotary embeddings (GLM-4.x, Step, Laguna, MiniMax, MiMo), per-layer-type RoPE settings (Gemma 3, Step, Laguna, MiMo, Reflection Beam), layers with no positional encoding at all (LLaMA 4, SmolLM3, Cohere, Reflection Beam)
+  - Attention: MHA, GQA, **multi-head latent attention** (DeepSeek, GLM-5, Mistral Small 4 / Large 3), **DeepSeek Sparse Attention** with a lightning indexer and cross-layer indexer sharing (GLM-5 / 5.1 / 5.2), sliding-window and chunked-attention layer patterns (Gemma 2/3, OLMo 3, GPT-OSS, Step, Laguna, LLaMA 4, MiMo), per-head attention sinks (GPT-OSS, MiMo), values narrower than keys (MiMo), per-head output gates (Step, Laguna, Reflection Beam), per-layer head counts, **block-sparse attention** with a key-block indexer (MiniMax M3), **shared KV layers** and keys-as-values (Gemma 4), per-layer input embeddings (Gemma 4 E2B / E4B), QK-norm (per head, or over the whole projection in MiniMax), attention-logit and final-logit soft-capping (Gemma 2; final logits only in Reflection Beam), position-dependent query scaling (LLaMA 4, Mistral Small 4 / Large 3, Reflection Beam)
   - Normalisation and scaling: RMSNorm (including zero-centred and weight-free variants), LayerNorm (Phi-1 / 1.5, Cohere), pre-norm, post-norm and **parallel** (attention and FFN read the same input) block layouts, Granite's embedding / residual / logit multipliers
-  - Feed-forward: gated SwiGLU-style MLPs (including clamped and biased variants), and many **sparse MoE** designs: sigmoid routing with a selection bias and group-limited top-k (GLM, DeepSeek V3, Step, Sarvam, Laguna, MiniMax), softmax routing (Qwen3, Qwen1.5 MoE, DeepSeek V2, Mistral), top-k-then-softmax (GPT-OSS), top-k-then-sigmoid with averaged shared experts (Cohere), top-1 sigmoid gating that scales the expert input (LLaMA 4), shared experts and dense leading layers
+  - Feed-forward: gated SwiGLU-style MLPs (including clamped and biased variants), and many **sparse MoE** designs: sigmoid routing with a selection bias and group-limited top-k (GLM, DeepSeek V3, Step, Sarvam, Laguna, MiniMax, MiMo, Reflection Beam), softmax routing (Qwen3, Qwen1.5 MoE, DeepSeek V2, Mistral), top-k-then-softmax (GPT-OSS), top-k-then-sigmoid with averaged shared experts (Cohere), top-1 sigmoid gating that scales the expert input (LLaMA 4), shared experts and dense leading layers
 - **Attention mechanisms from first principles.** A separate [`attention-mechanisms/`](attention-mechanisms) folder implements the building blocks on their own — useful as a learning path before reading the full models.
 - **KV-cache variants for every model.** A separate `model_with_kv_cache.py` sits next to each `model.py` (which is left unchanged). It generates with a prefill step followed by one token at a time, caching the keys and values after RoPE. Multi-head latent attention models (DeepSeek, GLM-5, Mistral Small 4 / Large 3) cache the compressed latent instead of per-head keys and values, models with a sparse indexer (GLM-5, MiniMax M3) also cache the indexer's keys, sliding-window and chunked layers use absolute-position masks, and Gemma 4's shared-KV layers store nothing of their own.
 - **Minimal dependencies:** `torch` and `tokenizers` (see [`requirements.txt`](requirements.txt)); only the optional `inference/` scripts also need `huggingface_hub` and `transformers`.
@@ -527,12 +527,14 @@ _INTELLECT-3 uses the GLM-4.5-Air architecture._
 </details>
 
 <details>
-<summary><b>Reflection</b> &nbsp;·&nbsp; 0 implemented / 1 total</summary>
+<summary><b>Reflection</b> &nbsp;·&nbsp; 1 implemented / 1 total</summary>
 
 
 | Model | Status | Folder |
 |---|---|---|
 | Reflection Beam (501B) | 🚧 Config + tokenizer only | [`Reflection/Reflection Beam (501B)`](Reflection/Reflection%20Beam%20%28501B%29) |
+
+_Reflection Beam (501B, about 23B active): 52 layers in which every sixth layer, and the last, is full attention with no positional encoding at all (queries are instead multiplied by `(1 + (position + 1) / 2048) ** 0.1`), and the rest are 512-token sliding-window layers with plain RoPE. Every attention layer has per-head QK-norm and a sigmoid output gate per head and channel (plus one bias per head). Every block has four RMSNorms (before and after each sub-layer) and depth-scaled residual additions `x / sqrt(k) + shortcut * sqrt((k - 1) / k)`, and the SwiGLU activation runs in float32. The first three layers are dense; the rest are sigmoid-routed MoE layers with 8 expert groups (4 kept), 256 experts, top 8, a selection bias, a routed scaling factor and no shared expert. The final logits are soft-capped at 30. Every model also has a `model_with_kv_cache.py`._
 
 </details>
 
@@ -590,16 +592,18 @@ _Grok 2.5: `config.json` plus xAI's own `tokenizer.tok.json`. That file is not i
 </details>
 
 <details>
-<summary><b>Xiaomi</b> &nbsp;·&nbsp; 0 implemented / 5 total</summary>
+<summary><b>Xiaomi</b> &nbsp;·&nbsp; 5 implemented / 5 total</summary>
 
 
 | Model | Status | Folder |
 |---|---|---|
-| Xiaomi MiMo-V2-Flash (309B) | 🚧 Config + tokenizer only | [`Xiaomi/Xiaomi MiMo-V2-Flash (309B)`](Xiaomi/Xiaomi%20MiMo-V2-Flash%20%28309B%29) |
-| Xiaomi MiMo-V2.5 (310B) | 🚧 Config + tokenizer only | [`Xiaomi/Xiaomi MiMo-V2.5 (310B)`](Xiaomi/Xiaomi%20MiMo-V2.5%20%28310B%29) |
-| Xiaomi MiMo-V2.5-Pro (1.02T) | 🚧 Config + tokenizer only | [`Xiaomi/Xiaomi MiMo-V2.5-Pro (1.02T)`](Xiaomi/Xiaomi%20MiMo-V2.5-Pro%20%281.02T%29) |
-| Xiaomi MiMo-V2.6-Flash-RL (309B) | 🚧 Config + tokenizer only | [`Xiaomi/Xiaomi MiMo-V2.6-Flash-RL (309B)`](Xiaomi/Xiaomi%20MiMo-V2.6-Flash-RL%20%28309B%29) |
-| Xiaomi MiMo-V2.6-Pro-RL (1.02T) | 🚧 Config + tokenizer only | [`Xiaomi/Xiaomi MiMo-V2.6-Pro-RL (1.02T)`](Xiaomi/Xiaomi%20MiMo-V2.6-Pro-RL%20%281.02T%29) |
+| Xiaomi MiMo-V2-Flash (309B) | ✅ Implemented | [`Xiaomi/Xiaomi MiMo-V2-Flash (309B)`](Xiaomi/Xiaomi%20MiMo-V2-Flash%20%28309B%29) |
+| Xiaomi MiMo-V2.5 (310B) | ✅ Implemented | [`Xiaomi/Xiaomi MiMo-V2.5 (310B)`](Xiaomi/Xiaomi%20MiMo-V2.5%20%28310B%29) |
+| Xiaomi MiMo-V2.5-Pro (1.02T) | ✅ Implemented | [`Xiaomi/Xiaomi MiMo-V2.5-Pro (1.02T)`](Xiaomi/Xiaomi%20MiMo-V2.5-Pro%20%281.02T%29) |
+| Xiaomi MiMo-V2.6-Flash-RL (309B) | ✅ Implemented | [`Xiaomi/Xiaomi MiMo-V2.6-Flash-RL (309B)`](Xiaomi/Xiaomi%20MiMo-V2.6-Flash-RL%20%28309B%29) |
+| Xiaomi MiMo-V2.6-Pro-RL (1.02T) | ✅ Implemented | [`Xiaomi/Xiaomi MiMo-V2.6-Pro-RL (1.02T)`](Xiaomi/Xiaomi%20MiMo-V2.6-Pro-RL%20%281.02T%29) |
+
+_Xiaomi MiMo-V2 / V2.5 / V2.6 (one shared file; the five configs differ only in sizes, one norm epsilon and the q/k/v layout): a hybrid of full-attention and sliding-window layers (window 128, a different RoPE base for each kind, only the first third of each head rotated), grouped-query attention whose values are narrower than its keys (128 vs 192 per head) and are multiplied by a constant, a learned per-head attention sink on the sliding-window layers, and a sigmoid-routed MoE (256 or 384 experts, top 8, selection bias, no shared expert) after one dense first layer. V2-Flash stores q, k and v as three matrices, the others as one fused `qkv_proj`. The `config.json` files of V2.5, V2.6-Flash-RL and V2.6-Pro-RL had their vision and audio sections removed. The multi-token-prediction layers and the vision / audio towers are not implemented. Every model also has a `model_with_kv_cache.py`._
 
 </details>
 
@@ -630,7 +634,7 @@ Being precise about what "implemented" means here:
 | Can pretrained weights be loaded? | **Not through code yet.** There is no weight-loading or checkpoint-conversion script. The files that use half-split RoPE have the same tensor layout as Hugging Face, so a Hugging Face state dict loads into them by renaming keys; this was tested with random Hugging Face weights for the dense Qwen, LLaMA 3 / 3.1 / 3.2, Gemma 1 / 2, Nanbeige, Phi-1 / 1.5 / 4, Mistral Small 3.1 and GLM-4.x models and for Cisco Antares (`Glm4Moe` stores its experts stacked, so those tensors must be split per expert). |
 | Have outputs been compared with a reference implementation? | **For the models listed below, yes; for the rest, no.** See [How the comparisons work](#how-the-comparisons-work). |
 | Are those comparison scripts in this repository? | **No.** They were run outside the repo and are not committed. There is no automated test suite or CI yet. |
-| Does inference use a KV cache or sampling? | **A KV cache for every implemented model (90 of 90), no sampling.** Each model has a separate `model_with_kv_cache.py`; generation is always greedy. |
+| Does inference use a KV cache or sampling? | **A KV cache for every implemented model (96 of 96), no sampling.** Each model has a separate `model_with_kv_cache.py`; generation is always greedy. |
 
 ### How the comparisons work
 
@@ -670,6 +674,7 @@ Being precise about what "implemented" means here:
 | INTELLECT-3 | `Glm4Moe` | Shares its code with GLM-4.5-Air. |
 | MiniMax M2 / M2.5 / M2.7 | `MiniMaxM2` | Partial-rotary factor set to `rotary_dim / head_dim`, as in MiniMax's official config. |
 | MiniMax M3 | `minimax_m3_vl` (text model) | From the `transformers` main branch; no released version includes it yet. |
+| Reflection Beam | `Beam` | From the `transformers` main branch; no released version includes it yet. Logits agree to about 1e-6 relative on small random models (also with tied embeddings, biases, other group counts, all-sliding / all-full stacks and a 400-token sequence); the state dict matches (the stacked HF experts are split per expert) and the full-size parameter count, 501,267,599,808, equals `transformers`'. The window, group-limited routing, the RoPE base, the final soft-cap, the output gate, QK-norm, the router bias, the position-dependent query scale, a wrong depth-scale index and RoPE on the full layers were each shown to matter. Two settings cannot be tested by comparison because they are cancelled by design: the routed scaling factor (the MoE output goes into an RMSNorm) and the depth scaling of the residual (a plain residual sum up to a global factor that every norm removes). The installed `transformers` 5.5.4 cannot run `Beam` unmodified, so the comparison used a copy with two small compatibility changes (a local `slice_logits_to_keep` and skipping its RoPE validator). |
 | Tiny Aya | `Cohere2` | |
 | North Mini Code, Command A+ | `Cohere2Moe` | From the `transformers` main branch; no released version includes it yet. |
 | Gemma 1 (2B / 7B) | `Gemma` | GELU feed-forward (the activation is set by `cfg["hidden_activation"]`: `gelu_pytorch_tanh`, which Gemma uses, or the exact `gelu`; both match `transformers` exactly), `1 + weight` RMSNorm, embeddings scaled by `sqrt(hidden_size)`, tied head and 256-dim heads read from the config. Whole model compared (logits agree to about 2e-6 relative); the state dict matches exactly and the full-size parameter counts equal `transformers`'. The published `config.json` says `"gelu"`, which `transformers` 5.5.4 builds as the exact GELU, whereas Gemma itself uses the tanh approximation (about 3e-4 relative apart); `main()` therefore sets `gelu_pytorch_tanh` explicitly. |
@@ -680,10 +685,12 @@ Being precise about what "implemented" means here:
 
 Step 3.5 Flash, Sarvam 30B, Laguna XS.2 and Laguna XS 2.1 were compared with the authors' official Hugging Face code. Laguna S 2.1 uses the same file as XS 2.1; only its full-size parameter count (117.56 B, equal to a layer-by-layer count) and a shrunken forward pass were checked.
 
+Xiaomi MiMo-V2 / V2.5 / V2.6 were compared with the authors' own `modeling_mimo_v2.py` (downloaded from their Hugging Face repositories; it is remote code, not part of `transformers`). On small random models the logits agree to about 2e-7 relative in float32 for the split q/k/v layout, the fused `qkv_proj` layout and both norm epsilons, and also for full-attention sinks, a biased projection, grouped routing with a scaling factor, top-1 routing, tied embeddings, all-sliding / all-full stacks and unrotated heads. The state dict matches the reference exactly, and the full-size parameter counts equal the reference's: 308,778,780,864 (V2-Flash, V2.5, V2.6-Flash-RL) and 1,021,248,126,336 (V2.5-Pro, V2.6-Pro-RL). Switching off, in turn, the sliding window, the second RoPE base, the value scale, the attention sink, partial rotation or the router bias each breaks the comparison. The V2-Flash file of the authors' code targets `transformers` 4.x and does not run on 5.5.4, so the split layout was checked through the newer file, which has the same attention maths and a `split` option.
+
 ### Other checks
 
 - **Cohere demos.** The `main()` demos of the three Cohere models were run end to end (real `config.json` and `tokenizer.json`, shrunk width and depth); the full-size ones need far more memory than typical hardware.
-- **KV-cache files.** Every `model_with_kv_cache.py` (all 90) was compared with its own folder's `model.py` by loading identical random weights into both. Without a cache the logits are exactly equal. With a cache (prefill plus one token at a time, and chunks of several tokens) they agree to about 1e-6 in float32, up to about 6e-5 for models with the largest logits (such as Step 3.5 Flash and MiniMax M3), because the error scales with the logit size. In float64 most agree to about 1e-15; a few (Sarvam, GPT-OSS, Step 3.5 Flash, GLM-5 / 5.1 / 5.2) show about 1e-7 to 1e-6 even there, because their routers and indexers compute in float32. Greedy generation produces the same tokens in every case. Deliberately broken versions (a wrong position offset, chunk mask or sliding-window mask, and, where they exist, the attention sinks, output gates, soft-capping, shared-KV layers, query-scaling positions or cached indexer keys) were each caught. The cache files copy their main file, so they inherit its quirks.
+- **KV-cache files.** Every `model_with_kv_cache.py` (all 96) was compared with its own folder's `model.py` by loading identical random weights into both. Without a cache the logits are exactly equal. With a cache (prefill plus one token at a time, and chunks of several tokens) they agree to about 1e-6 in float32, up to about 6e-5 for models with the largest logits (such as Step 3.5 Flash and MiniMax M3), because the error scales with the logit size. In float64 most agree to about 1e-15; a few (Sarvam, GPT-OSS, Step 3.5 Flash, GLM-5 / 5.1 / 5.2, MiMo, Reflection Beam) show about 1e-7 to 1e-6 even there, because their routers and indexers compute in float32. Greedy generation produces the same tokens in every case. Deliberately broken versions (a wrong position offset, chunk mask or sliding-window mask, and, where they exist, the attention sinks, output gates, soft-capping, shared-KV layers, query-scaling positions or cached indexer keys) were each caught. The cache files copy their main file, so they inherit its quirks.
 
 ### Not compared against any reference
 
@@ -699,7 +706,7 @@ Issues already identified, listed so nobody is surprised.
 
 ### Not implemented
 
-- **Multi-token-prediction modules** (DeepSeek V3, GLM-4.7, GLM-5 / 5.1 / 5.2, Step 3.5 Flash, MiniMax M2 / M2.5 / M2.7 / M3). They are only used for speculative decoding and training.
+- **Multi-token-prediction modules** (DeepSeek V3, GLM-4.7, GLM-5 / 5.1 / 5.2, Step 3.5 Flash, MiniMax M2 / M2.5 / M2.7 / M3, Xiaomi MiMo-V2 / V2.5 / V2.6). They are only used for speculative decoding and training.
 - **Vision and audio encoders**, for any model.
 
 ### Memory and performance
@@ -719,7 +726,7 @@ Issues already identified, listed so nobody is surprised.
 Planned work, roughly in priority order. Nothing below is implemented yet.
 
 - [ ] **Correctness:** add the logit-comparison scripts to the repository, plus weight-loading scripts and comparisons on real small checkpoints (e.g. Qwen2.5-0.5B, LLaMA 3.2 1B, Gemma 3 1B, OLMo 2/3 7B)
-- [ ] **Implement the remaining 🚧 models**, prioritising new ideas over extra sizes: DeepSeek R1 / V3.2 / V4, Gemma 4 12B, Nemotron 3, MiMo, GLM-5.3-Flash, Sarvam 105B, Nanbeige 4.2, Muse Glimmer
+- [ ] **Implement the remaining 🚧 models**, prioritising new ideas over extra sizes: DeepSeek R1 / V3.2 / V4, Gemma 4 12B, Nemotron 3, GLM-5.3-Flash, Sarvam 105B, Nanbeige 4.2, Muse Glimmer
 - [ ] Unify code style on the newer `cfg`-dict / `compute_rope_params` structure; share one implementation per family
 - [ ] Rolling-buffer caches for the sliding-window layers; sampling (temperature, top-k, top-p); chat templates
 - [ ] Parameter-count and memory-estimate script (instantiate on the `meta` device to sanity-check configs)
